@@ -130,6 +130,8 @@
     .form-group textarea { height: 100px; resize: vertical; }
     .form-actions { display: flex; gap: 12px; margin-top: 20px; }
     .toggle-group { display: flex; gap: 16px; }
+    #edit-modal .modal { max-width: 720px; }
+    #edit-modal .toggle-group { flex-wrap: wrap; row-gap: 8px; }
     .toggle-item { display: flex; align-items: center; gap: 8px; font-size: 14px; }
     .toggle-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: #003189; }
 
@@ -604,6 +606,7 @@
   <!-- Sécurité -->
   <div class="form-card" style="border-bottom-color:#EF4444;">
     <h3>🔑 Sécurité</h3>
+    <div id="password-message" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:8px;font-size:14px;font-weight:500;"></div>
     <div class="form-grid">
       <div class="form-group">
         <label>Nouveau mot de passe</label>
@@ -2415,30 +2418,51 @@ async function emptyTrash() {
     showAlert('❌ Erreur lors du vidage', 'error', 0);
   }
 }
-  /**
+/**
+ * FONCTION : showPasswordMessage
+ * DESCRIPTION : Affiche un message juste au-dessus des champs de mot de passe
+ *               (au lieu de l'alerte en haut de page, invisible quand on a scrollé)
+ * PARAMÈTRES : text (string) — message ; type (string) — 'error' ou 'success'
+ * RETOURNE : rien
+ * MODIFIE : contenu, couleurs et visibilité de #password-message ; fait défiler jusqu'à lui
+ */
+function showPasswordMessage(text, type) {
+  const box = document.getElementById('password-message');
+  const isError = type === 'error';
+  box.textContent = text;
+  box.style.background = isError ? '#FEE2E2' : '#DCFCE7';
+  box.style.color = isError ? '#B91C1C' : '#15803D';
+  box.style.border = '1px solid ' + (isError ? '#FCA5A5' : '#86EFAC');
+  box.style.display = 'block';
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/**
  * FONCTION : changePassword
  * DESCRIPTION : Change le mot de passe admin et le sauvegarde en localStorage
  * PARAMÈTRES : aucun (lit #new-password et #confirm-password)
  * RETOURNE : rien
- * MODIFIE : ADMIN_PASSWORD en mémoire et dans localStorage
+ * MODIFIE : ADMIN_PASSWORD en mémoire et dans localStorage, message #password-message
  */
 function changePassword() {
   const newPwd = document.getElementById('new-password').value;
   const confirmPwd = document.getElementById('confirm-password').value;
 
   if (!newPwd || newPwd.length < 8) {
-    showAlert('❌ Le mot de passe doit contenir au moins 8 caractères', 'error', 0);
+    showPasswordMessage('❌ Le mot de passe doit contenir au moins 8 caractères', 'error');
+    document.getElementById('new-password').focus();
     return;
   }
   if (newPwd !== confirmPwd) {
-    showAlert('❌ Les mots de passe ne correspondent pas', 'error', 0);
+    showPasswordMessage('❌ Les mots de passe ne correspondent pas', 'error');
+    document.getElementById('confirm-password').focus();
     return;
   }
 
   localStorage.setItem('admin_password', newPwd);
   document.getElementById('new-password').value = '';
   document.getElementById('confirm-password').value = '';
-  showAlert('✅ Mot de passe changé avec succès !', 'success', 0);
+  showPasswordMessage('✅ Mot de passe changé avec succès !', 'success');
   addLog('🔑 Changement mot de passe', 'Mot de passe admin modifié');
 }
 
@@ -2729,6 +2753,37 @@ async function deleteBanner(id, name, imageUrl) {
 
 
 /**
+ * FONCTION : sqlValue
+ * DESCRIPTION : Convertit une valeur JavaScript en littéral SQL sûr
+ *               (NULL, true/false, nombre, objet en JSON, texte avec apostrophes doublées)
+ * PARAMÈTRES : v (any) — valeur issue de Supabase
+ * RETOURNE : string — littéral SQL
+ * MODIFIE : rien
+ */
+function sqlValue(v) {
+  if (v === null || v === undefined) return 'NULL';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'number') return String(v);
+  if (typeof v === 'object') return `'${JSON.stringify(v).replace(/'/g, "''")}'`;
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
+/**
+ * FONCTION : sqlInsertRow
+ * DESCRIPTION : Génère une instruction INSERT avec TOUTES les colonnes de la ligne
+ *               (les nouvelles colonnes comme is_ecard, subcategory_id, image ou les dates
+ *               sont donc incluses automatiquement)
+ * PARAMÈTRES : table (string) — nom de la table ; row (object) — ligne renvoyée par Supabase
+ * RETOURNE : string — instruction INSERT terminée par un retour à la ligne
+ * MODIFIE : rien
+ */
+function sqlInsertRow(table, row) {
+  const cols = Object.keys(row);
+  const vals = cols.map(c => sqlValue(row[c]));
+  return `INSERT INTO public.${table} (${cols.join(', ')}) VALUES (${vals.join(', ')});\n`;
+}
+
+/**
  * FONCTION : exportSQL
  * DESCRIPTION : Exporte toutes les offres et catégories en format SQL téléchargeable
  * PARAMÈTRES : aucun
@@ -2747,19 +2802,13 @@ async function exportSQL() {
   sql += `-- Généré automatiquement depuis l'interface admin\n\n`;
 
   sql += `-- CATÉGORIES\n`;
-  categories.forEach(cat => {
-    sql += `INSERT INTO categories (id, value, label, icon, position, active) VALUES ('${cat.id}', '${cat.value}', '${cat.label}', '${cat.icon}', ${cat.position}, ${cat.active});\n`;
-  });
+  categories.forEach(cat => { sql += sqlInsertRow('categories', cat); });
 
   sql += `\n-- SOUS-CATÉGORIES\n`;
-  subcategories.forEach(sub => {
-    sql += `INSERT INTO subcategories (id, category_id, label, icon, position, active) VALUES ('${sub.id}', '${sub.category_id}', '${sub.label}', '${sub.icon ?? ''}', ${sub.position}, ${sub.active});\n`;
-  });
+  subcategories.forEach(sub => { sql += sqlInsertRow('subcategories', sub); });
 
   sql += `\n-- OFFRES\n`;
-  offers.forEach(o => {
-    sql += `INSERT INTO offers (id, title, description, discount, category_id, city, partner_name, partner_url, flash, is_new, active, position) VALUES ('${o.id}', '${(o.title||'').replace(/'/g,"''")}', '${(o.description||'').replace(/'/g,"''")}', '${o.discount}', '${o.category_id}', '${o.city}', '${o.partner_name}', '${o.partner_url}', ${o.flash}, ${o.is_new}, ${o.active}, ${o.position});\n`;
-  });
+  offers.forEach(o => { sql += sqlInsertRow('offers', o); });
 
   const blob = new Blob([sql], { type: 'text/sql' });
   const url = URL.createObjectURL(blob);
