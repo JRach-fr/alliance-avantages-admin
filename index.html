@@ -264,6 +264,7 @@
       <option value="inactive">Inactives</option>
       <option value="flash">Flash</option>
       <option value="new">Nouvelles</option>
+      <option value="ecard">E-cartes</option>
     </select>
     <button onclick="resetSearch()" style="background:#6B7280;color:white;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:14px;">✕ Réinitialiser</button>
   </div>
@@ -279,6 +280,7 @@
               <th>Réduction</th>
               <th>Flash</th>
               <th>Nouveau</th>
+              <th>E-carte</th>
               <th>Statut</th>
               <th>Actions</th>
             </tr>
@@ -370,7 +372,7 @@
                 <input type="checkbox" id="new-active" checked> Actif
               </label>
               <label class="toggle-item">
-                <input type="checkbox" id="new-is-ecard"> E-carte cadeau
+                <input type="checkbox" id="new-is-ecard" onchange="syncEcardPromo('new')"> E-carte cadeau
               </label>
             </div>
           </div>
@@ -1017,6 +1019,12 @@
         <label>Code promo</label>
         <input type="text" id="edit-promo-code">
       </div>
+      <div class="form-group">
+        <label>E-carte</label>
+        <label class="toggle-item" style="display:flex;align-items:center;gap:8px;min-height:40px;text-transform:none;letter-spacing:0;font-size:14px;font-weight:500;color:#111827;">
+          <input type="checkbox" id="edit-is-ecard" onchange="syncEcardPromo('edit')"> Cette offre est une e-carte cadeau
+        </label>
+      </div>
       <div class="form-group full">
         <label>Image</label>
         <div style="display:flex;flex-direction:column;gap:8px;">
@@ -1037,7 +1045,6 @@
           <label class="toggle-item"><input type="checkbox" id="edit-flash"> Flash</label>
           <label class="toggle-item"><input type="checkbox" id="edit-is-new"> Nouveau</label>
           <label class="toggle-item"><input type="checkbox" id="edit-active"> Actif</label>
-          <label class="toggle-item"><input type="checkbox" id="edit-is-ecard"> E-carte</label>
         </div>
       </div>
     </div>
@@ -1332,6 +1339,12 @@ function togglePassword() {
         </td>
         <td>
           <label style="cursor:pointer">
+            <input type="checkbox" ${o.is_ecard ? 'checked' : ''} onchange="toggleField('${o.id}', 'is_ecard', this.checked)">
+            🎁
+          </label>
+        </td>
+        <td>
+          <label style="cursor:pointer">
             <input type="checkbox" ${o.active ? 'checked' : ''} onchange="toggleField('${o.id}', 'active', this.checked)">
             ${o.active ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Inactif</span>'}
           </label>
@@ -1393,6 +1406,7 @@ function filterOffers() {
     if (statusFilter === 'inactive' && o.active) return false;
     if (statusFilter === 'flash' && !o.flash) return false;
     if (statusFilter === 'new' && !o.is_new) return false;
+    if (statusFilter === 'ecard' && !o.is_ecard) return false;
 
     return true;
   });
@@ -1406,7 +1420,7 @@ function filterOffers() {
   // Mise à jour du tableau
   const tbody = document.getElementById('offers-table');
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9CA3AF;padding:20px;">Aucune offre trouvée</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9CA3AF;padding:20px;">Aucune offre trouvée</td></tr>';
     return;
   }
 
@@ -1428,6 +1442,12 @@ function filterOffers() {
           ✨
         </label>
       </td>
+      <td>
+          <label style="cursor:pointer">
+            <input type="checkbox" ${o.is_ecard ? 'checked' : ''} onchange="toggleField('${o.id}', 'is_ecard', this.checked)">
+            🎁
+          </label>
+        </td>
       <td>
         <label style="cursor:pointer">
           <input type="checkbox" ${o.active ? 'checked' : ''} onchange="toggleField('${o.id}', 'active', this.checked)">
@@ -1726,6 +1746,7 @@ function toggleCityInput(value) {
     document.getElementById('new-is-new').checked = true;
     document.getElementById('new-active').checked = true;
     document.getElementById('new-is-ecard').checked = false;
+    syncEcardPromo('new');
     document.getElementById('new-category').value = '';
     document.getElementById('new-subcategory').innerHTML = '<option value="">Choisir une sous-catégorie...</option>';
   }
@@ -1776,6 +1797,7 @@ function toggleCityInput(value) {
     document.getElementById('edit-is-new').checked = o.is_new || false;
     document.getElementById('edit-active').checked = o.active || false;
     document.getElementById('edit-is-ecard').checked = o.is_ecard || false;
+    syncEcardPromo('edit');
     document.getElementById('edit-modal').classList.add('open');
   }
 
@@ -1789,7 +1811,25 @@ function toggleCityInput(value) {
   function closeModal() {
     document.getElementById('edit-modal').classList.remove('open');
   }
+   /**
+   * FONCTION : syncEcardPromo
+   * DESCRIPTION : Une e-carte n'a pas de code promo : quand la case "E-carte" est cochée,
+   *               le champ "Code promo" est vidé et grisé
+   * PARAMÈTRES :
+   *   - prefix (string) : 'new' (formulaire d'ajout) ou 'edit' (fenêtre de modification)
+   * RETOURNE : rien
+   * MODIFIE : état (désactivé ou non) et valeur de #<prefix>-promo-code
+   */
+  function syncEcardPromo(prefix) {
+    const isEcard = document.getElementById(prefix + '-is-ecard').checked;
+    const promo = document.getElementById(prefix + '-promo-code');
+    if (isEcard) promo.value = '';
+    promo.disabled = isEcard;
+    promo.style.background = isEcard ? '#F3F4F6' : '';
+    promo.style.cursor = isEcard ? 'not-allowed' : '';
+  }
 
+  
   /**
    * FONCTION : fillEditSubcategories
    * DESCRIPTION : Remplit la liste des sous-catégories de la fenêtre "Modifier"
