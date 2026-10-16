@@ -1300,7 +1300,7 @@ function togglePassword() {
         <td><strong>${o.title}</strong></td>
         <td>${o.partner_name}</td>
         <td>${cat ? cat.icon + ' ' + cat.label : '-'}</td>
-        <td><span class="badge badge-orange">${o.discount}</span></td>
+        <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
         <td><span class="badge ${o.active ? 'badge-green' : 'badge-red'}">${o.active ? 'Actif' : 'Inactif'}</span></td>
         <td>${o.flash ? '⚡ Flash' : '-'}</td>
       </tr>`;
@@ -1327,7 +1327,7 @@ function togglePassword() {
         <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong></td>
         <td>${o.partner_name}</td>
         <td>${o.city || '-'}</td>
-        <td><span class="badge badge-orange">${o.discount}</span></td>
+        <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
         <td>
           <label style="cursor:pointer">
             <input type="checkbox" ${o.flash ? 'checked' : ''} onchange="toggleField('${o.id}', 'flash', this.checked)">
@@ -1432,7 +1432,7 @@ function filterOffers() {
     return `<tr>
       <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${cat ? `<br><small style="color:#9CA3AF;">${cat.icon} ${cat.label}</small>` : ''}</td>      <td>${o.partner_name}</td>
       <td>${o.city || '-'}</td>
-      <td><span class="badge badge-orange">${o.discount}</span></td>
+      <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
       <td>
         <label style="cursor:pointer">
           <input type="checkbox" ${o.flash ? 'checked' : ''} onchange="toggleField('${o.id}', 'flash', this.checked)">
@@ -3141,7 +3141,7 @@ function simSelectCategory(categoryId) {
     <div onclick="simShowOffer('${o.id}')" style="background:white;margin:6px 8px;border-radius:10px;padding:10px;border-left:3px solid ${o.flash ? '#FF6B00' : '#003189'};cursor:pointer;box-shadow:0 1px 4px rgba(0,49,137,0.08);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         ${o.flash ? '<span style="background:#FF6B00;color:white;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:800;">FLASH</span>' : '<span></span>'}
-        <span style="background:#FF6B00;color:white;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">${o.discount || ''}</span>
+        ${o.discount ? `<span style="background:#FF6B00;color:white;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">${o.discount}</span>` : ''}
       </div>
       <div style="font-size:11px;font-weight:700;color:#001F5E;margin-bottom:2px;">${o.title.substring(0,50)}${o.title.length>50?'...':''}</div>
       <div style="font-size:10px;color:#9CA3AF;">📍 ${o.city} · ${o.partner_name}</div>
@@ -3168,7 +3168,7 @@ function simShowOffer(offerId) {
       <div onclick="simSelectCategory(null)" style="color:#003189;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;">← Retour</div>
       ${offer.image_url ? `<img src="${offer.image_url}" style="width:100%;border-radius:10px;margin-bottom:10px;" onerror="this.style.display='none'">` : ''}
       ${offer.flash ? '<span style="background:#FF6B00;color:white;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;">VENTE FLASH</span><br><br>' : ''}
-      <div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>
+      ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
       <div style="font-size:14px;font-weight:700;color:#001F5E;margin-bottom:4px;">${offer.title}</div>
       <div style="font-size:11px;color:#6B7280;margin-bottom:10px;">par ${offer.partner_name}</div>
       <div style="font-size:11px;color:#374151;margin-bottom:6px;">📍 ${offer.city}</div>
@@ -3429,7 +3429,7 @@ function openOfferPreview(id) {
   content.innerHTML = `
     ${offer.image_url ? `<img src="${offer.image_url}" style="width:100%;border-radius:10px;margin-bottom:10px;" onerror="this.style.display='none'">` : ''}
     ${offer.flash ? '<span style="background:#FF6B00;color:white;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;">VENTE FLASH</span><br><br>' : ''}
-    <div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount || ''}</div>
+    ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
     <div style="font-size:14px;font-weight:700;color:#001F5E;margin-bottom:4px;line-height:20px;">${offer.title}</div>
     <div style="font-size:11px;color:#6B7280;margin-bottom:8px;">par ${offer.partner_name}</div>
     <div style="font-size:11px;color:#374151;margin-bottom:4px;">📍 ${offer.city || 'En ligne'}</div>
