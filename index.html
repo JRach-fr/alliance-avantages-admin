@@ -369,6 +369,9 @@
               <label class="toggle-item">
                 <input type="checkbox" id="new-active" checked> Actif
               </label>
+              <label class="toggle-item">
+                <input type="checkbox" id="new-is-ecard"> E-carte cadeau
+              </label>
             </div>
           </div>
         </div>
@@ -987,6 +990,14 @@
         <textarea id="edit-description"></textarea>
       </div>
       <div class="form-group">
+        <label>Catégorie</label>
+        <select id="edit-category"></select>
+      </div>
+      <div class="form-group">
+        <label>Sous-catégorie</label>
+        <select id="edit-subcategory"></select>
+      </div>
+      <div class="form-group">
         <label>Réduction</label>
         <input type="text" id="edit-discount">
       </div>
@@ -1026,6 +1037,7 @@
           <label class="toggle-item"><input type="checkbox" id="edit-flash"> Flash</label>
           <label class="toggle-item"><input type="checkbox" id="edit-is-new"> Nouveau</label>
           <label class="toggle-item"><input type="checkbox" id="edit-active"> Actif</label>
+          <label class="toggle-item"><input type="checkbox" id="edit-is-ecard"> E-carte</label>
         </div>
       </div>
     </div>
@@ -1546,6 +1558,7 @@ function resetSearch() {
     const flash = document.getElementById('new-flash').checked;
     const isNew = document.getElementById('new-is-new').checked;
     const active = document.getElementById('new-active').checked;
+    const isEcard = document.getElementById('new-is-ecard').checked;
 
     if (!title || !partnerName || !partnerUrl || !categoryId) {
       showAlert('Merci de remplir les champs obligatoires : Titre, Partenaire, URL de l\'offre et Catégorie', 'error');
@@ -1559,7 +1572,7 @@ function resetSearch() {
       promo_code: promoCode || null,
       image_url: imageUrl || null,
       expires_at: expiresAt || null,
-      flash, is_new: isNew, active,
+      flash, is_new: isNew, active, is_ecard: isEcard,
       position: 0
     };
 
@@ -1712,6 +1725,7 @@ function toggleCityInput(value) {
     document.getElementById('new-flash').checked = false;
     document.getElementById('new-is-new').checked = true;
     document.getElementById('new-active').checked = true;
+    document.getElementById('new-is-ecard').checked = false;
     document.getElementById('new-category').value = '';
     document.getElementById('new-subcategory').innerHTML = '<option value="">Choisir une sous-catégorie...</option>';
   }
@@ -1739,6 +1753,12 @@ function toggleCityInput(value) {
     document.getElementById('edit-partner-name').value = o.partner_name || '';
     document.getElementById('edit-partner-url').value = o.partner_url || '';
     document.getElementById('edit-promo-code').value = o.promo_code || '';
+    // Catégorie et sous-catégorie : listes remplies avec les valeurs actuelles
+    const catSel = document.getElementById('edit-category');
+    catSel.innerHTML = allCategories.map(c => `<option value="${c.id}">${c.icon} ${c.label}</option>`).join('');
+    catSel.value = o.category_id || '';
+    fillEditSubcategories(o.category_id, o.subcategory_id);
+    catSel.onchange = () => fillEditSubcategories(catSel.value, null);
     
     // Réinitialise les champs upload et affiche l'image actuelle
     document.getElementById('edit-offer-upload-status').style.display = 'none';
@@ -1755,6 +1775,7 @@ function toggleCityInput(value) {
     document.getElementById('edit-flash').checked = o.flash || false;
     document.getElementById('edit-is-new').checked = o.is_new || false;
     document.getElementById('edit-active').checked = o.active || false;
+    document.getElementById('edit-is-ecard').checked = o.is_ecard || false;
     document.getElementById('edit-modal').classList.add('open');
   }
 
@@ -1769,6 +1790,24 @@ function toggleCityInput(value) {
     document.getElementById('edit-modal').classList.remove('open');
   }
 
+  /**
+   * FONCTION : fillEditSubcategories
+   * DESCRIPTION : Remplit la liste des sous-catégories de la fenêtre "Modifier"
+   *               selon la catégorie choisie
+   * PARAMÈTRES :
+   *   - categoryId (string) : UUID de la catégorie choisie
+   *   - selectedId (string|null) : sous-catégorie à présélectionner
+   * RETOURNE : rien
+   * MODIFIE : contenu de #edit-subcategory
+   */
+  function fillEditSubcategories(categoryId, selectedId) {
+    const select = document.getElementById('edit-subcategory');
+    const subs = allSubcategories.filter(s => s.category_id === categoryId);
+    select.innerHTML = '<option value="">Aucune sous-catégorie</option>' +
+      subs.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
+    select.value = selectedId && subs.some(s => s.id === selectedId) ? selectedId : '';
+  }
+  
   /**
  * FONCTION : saveEdit
  * DESCRIPTION : Sauvegarde les modifications d'une offre dans Supabase
@@ -1801,6 +1840,8 @@ console.log('Sont différentes:', oldOffer?.image_url !== newImageUrl);
     
     const data = {
       title: document.getElementById('edit-title').value,
+      category_id: document.getElementById('edit-category').value || oldOffer.category_id,
+      subcategory_id: document.getElementById('edit-subcategory').value || null,
       description: document.getElementById('edit-description').value,
       discount: document.getElementById('edit-discount').value,
       city: document.getElementById('edit-city').value,
@@ -1812,6 +1853,7 @@ console.log('Sont différentes:', oldOffer?.image_url !== newImageUrl);
       flash: document.getElementById('edit-flash').checked,
       is_new: document.getElementById('edit-is-new').checked,
       active: document.getElementById('edit-active').checked,
+      is_ecard: document.getElementById('edit-is-ecard').checked,
     };
     const ok = await supabaseUpdate('offers', id, data);
     if (ok) {
