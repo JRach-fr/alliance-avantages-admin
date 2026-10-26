@@ -257,8 +257,12 @@
       placeholder="🔍 Rechercher par titre, partenaire, ville..." 
       oninput="filterOffers()"
       style="flex:1;padding:10px 14px;border:1px solid #003189;border-radius:8px;font-size:14px;min-width:200px;">
-    <select id="filter-category" onchange="filterOffers()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+    <select id="filter-category" onchange="onFilterCategoryChange()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
       <option value="">Toutes les catégories</option>
+    </select>
+    <!-- Sous-catégories de la catégorie choisie (grisée si aucune) -->
+    <select id="filter-subcategory" onchange="filterOffers()" disabled style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+      <option value="">Toutes les sous-catégories</option>
     </select>
     <select id="filter-status" onchange="filterOffers()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
       <option value="">Tous les statuts</option>
@@ -1319,7 +1323,8 @@ function togglePassword() {
  * DESCRIPTION : Charge et affiche la liste complète des offres avec actions
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : variable allOffers, contenu de #offers-table
+ * MODIFIE : variable allOffers, contenu de #offers-table, #filter-category,
+ *           #filter-subcategory ; réapplique les filtres en cours (filterOffers)
  */
   
   async function loadOffers() {
@@ -1376,8 +1381,52 @@ function togglePassword() {
   if (searchCount) {
     searchCount.textContent = `${allOffers.filter(o => !o.deleted_at).length} offres au total`;
   }
+
+  // Réapplique la recherche et les filtres en cours (catégorie, sous-catégorie, statut) :
+  // après une modification, la liste garde la même sélection au lieu de tout réafficher
+  remplirFiltreSousCategories();
+  if (document.getElementById('search-offers')) filterOffers();
 }
   
+/**
+ * FONCTION : remplirFiltreSousCategories
+ * DESCRIPTION : Remplit la liste déroulante des sous-catégories de la section Offres
+ *               selon la catégorie choisie. La liste est grisée s'il n'y a pas de
+ *               catégorie choisie ou si la catégorie n'a pas de sous-catégorie.
+ *               La sous-catégorie déjà sélectionnée est conservée si elle existe encore.
+ * PARAMÈTRES : aucun (lit #filter-category et allSubcategories)
+ * RETOURNE : rien
+ * MODIFIE : contenu, valeur et état (disabled) de #filter-subcategory
+ */
+function remplirFiltreSousCategories() {
+  const select = document.getElementById('filter-subcategory');
+  if (!select) return;
+  const categoryId = document.getElementById('filter-category').value;
+  const valeurActuelle = select.value;
+  const subs = categoryId
+    ? (allSubcategories || []).filter(sc => sc.category_id === categoryId)
+    : [];
+  select.innerHTML = '<option value="">Toutes les sous-catégories</option>' +
+    subs.map(sc => `<option value="${sc.id}">${sc.icon || ''} ${sc.label}${sc.active ? '' : ' (inactive)'}</option>`).join('');
+  select.disabled = subs.length === 0;
+  select.value = subs.some(sc => sc.id === valeurActuelle) ? valeurActuelle : '';
+}
+
+/**
+ * FONCTION : onFilterCategoryChange
+ * DESCRIPTION : Appelée quand on change de catégorie dans la section Offres :
+ *               remet la sous-catégorie à « Toutes », met à jour sa liste puis filtre
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : #filter-subcategory, contenu de #offers-table (via filterOffers)
+ */
+function onFilterCategoryChange() {
+  const select = document.getElementById('filter-subcategory');
+  if (select) select.value = '';
+  remplirFiltreSousCategories();
+  filterOffers();
+}
+
 /**
  * FONCTION : estCategorieEcartes
  * DESCRIPTION : Indique si une catégorie est la catégorie virtuelle « E-cartes cadeaux »,
@@ -1463,13 +1512,15 @@ function badgePerimee(offer) {
  * DESCRIPTION : Filtre la liste des offres en temps réel selon la recherche et les filtres
  *               Appelée à chaque frappe dans la barre de recherche ou changement de filtre
  *               Travaille sur les données déjà chargées (allOffers) sans appel réseau
- * PARAMÈTRES : aucun (lit #search-offers, #filter-category, #filter-status)
+ * PARAMÈTRES : aucun (lit #search-offers, #filter-category, #filter-subcategory, #filter-status)
  * RETOURNE : rien
  * MODIFIE : contenu de #offers-table, texte de #search-count
  */
 function filterOffers() {
   const query = document.getElementById('search-offers').value.toLowerCase().trim();
   const categoryFilter = document.getElementById('filter-category').value;
+  const subcatEl = document.getElementById('filter-subcategory');
+  const subcategoryFilter = subcatEl ? subcatEl.value : '';
   const statusFilter = document.getElementById('filter-status').value;
 
   const filtered = allOffers.filter(o => {
@@ -1488,6 +1539,9 @@ function filterOffers() {
     // Filtre catégorie
     // (la catégorie « E-cartes cadeaux » affiche toutes les offres is_ecard)
     if (categoryFilter && !offreDansCategorie(o, categoryFilter)) return false;
+
+    // Filtre sous-catégorie
+    if (subcategoryFilter && o.subcategory_id !== subcategoryFilter) return false;
 
     // Filtre statut
     if (statusFilter === 'active' && !o.active) return false;
@@ -1556,11 +1610,13 @@ function filterOffers() {
  * DESCRIPTION : Réinitialise tous les filtres et la barre de recherche
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : valeurs de #search-offers, #filter-category, #filter-status, recharge la liste complète
+ * MODIFIE : valeurs de #search-offers, #filter-category, #filter-subcategory, #filter-status,
+ *           recharge la liste complète
  */
 function resetSearch() {
   document.getElementById('search-offers').value = '';
   document.getElementById('filter-category').value = '';
+  document.getElementById('filter-subcategory').value = '';
   document.getElementById('filter-status').value = '';
   document.getElementById('search-count').textContent = '';
   loadOffers();
