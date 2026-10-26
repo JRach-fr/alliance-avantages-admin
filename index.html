@@ -1574,7 +1574,8 @@ function resetSearch() {
  *   - value (boolean) : nouvelle valeur
  * RETOURNE : rien
  * MODIFIE : le champ correspondant dans Supabase, la copie locale dans allOffers,
- *           affiche une alerte ; réaffiche la liste si le champ est « active »
+ *           ajoute une ligne au journal, affiche une alerte ;
+ *           réaffiche la liste si le champ est « active »
  */
   async function toggleField(id, field, value) {
     const ok = await supabaseUpdate('offers', id, { [field]: value });
@@ -1584,10 +1585,66 @@ function resetSearch() {
       // le fond rouge d'une offre périmée disparaît dès qu'on la désactive
       const offer = allOffers.find(o => o.id === id);
       if (offer) offer[field] = value;
+      addLog(libelleBascule(field, value), `"${offer ? offer.title : id}"`);
       if (field === 'active' && typeof filterOffers === 'function') filterOffers();
     }
     else showAlert('Erreur lors de la mise à jour', 'error');
   }
+
+/**
+ * FONCTION : libelleBascule
+ * DESCRIPTION : Libellé du journal pour une case cochée/décochée dans la liste des offres
+ * PARAMÈTRES :
+ *   - field (string) : champ modifié (active, flash, is_new, is_ecard)
+ *   - value (boolean) : nouvelle valeur
+ * RETOURNE : string - libellé de l'action (ex. « ✅ Offre activée »)
+ * MODIFIE : rien
+ */
+function libelleBascule(field, value) {
+  const libelles = {
+    active:   ['✅ Offre activée', '⛔ Offre désactivée'],
+    flash:    ['⚡ Vente flash activée', '⚡ Vente flash retirée'],
+    is_new:   ['✨ Marquée « nouveauté »', '✨ Nouveauté retirée'],
+    is_ecard: ['🎁 Marquée e-carte', '🎁 E-carte retirée'],
+  };
+  const l = libelles[field];
+  return l ? (value ? l[0] : l[1]) : `✏️ ${field} → ${value}`;
+}
+
+/**
+ * FONCTION : decrireModifications
+ * DESCRIPTION : Compare une offre avant/après modification et liste les champs changés
+ *               en clair pour le journal (ex. « réduction : -10 % → -15 %, statut : actif → inactif »)
+ * PARAMÈTRES :
+ *   - avant (object) : offre telle qu'enregistrée avant la modification
+ *   - apres (object) : nouvelles valeurs envoyées à Supabase
+ * RETOURNE : string - description des changements (« aucun changement » si rien n'a bougé)
+ * MODIFIE : rien
+ */
+function decrireModifications(avant, apres) {
+  if (!avant) return '';
+  const champs = {
+    title: 'titre', description: 'description', discount: 'réduction', city: 'ville',
+    partner_name: 'partenaire', partner_url: 'lien', promo_code: 'code promo',
+    image_url: 'image', expires_at: 'expiration', category_id: 'catégorie',
+    subcategory_id: 'sous-catégorie', flash: 'flash', is_new: 'nouveauté',
+    active: 'statut', is_ecard: 'e-carte',
+  };
+  const norm = v => (v === null || v === undefined) ? '' : String(v);
+  const court = v => { const t = norm(v); return t.length > 30 ? t.slice(0, 30) + '…' : (t || 'vide'); };
+  const changes = [];
+  for (const [cle, libelle] of Object.entries(champs)) {
+    if (!(cle in apres)) continue;
+    let a = norm(avant[cle]), b = norm(apres[cle]);
+    if (cle === 'expires_at') { a = a.slice(0, 16).replace(' ', 'T'); b = b.slice(0, 16); }
+    if (a === b) continue;
+    if (cle === 'active') changes.push(`statut : ${avant.active ? 'actif' : 'inactif'} → ${apres.active ? 'actif' : 'inactif'}`);
+    else if (typeof apres[cle] === 'boolean') changes.push(`${libelle} : ${apres[cle] ? 'oui' : 'non'}`);
+    else if (['title', 'discount', 'city', 'partner_name'].includes(cle)) changes.push(`${libelle} : ${court(avant[cle])} → ${court(apres[cle])}`);
+    else changes.push(libelle);
+  }
+  return changes.length ? changes.join(', ') : 'aucun changement';
+}
 
   /**
  * FONCTION : deleteOffer
@@ -1950,7 +2007,8 @@ function toggleCityInput(value) {
  * DESCRIPTION : Sauvegarde les modifications d'une offre dans Supabase
  * PARAMÈTRES : aucun (lit les champs #edit-*)
  * RETOURNE : rien
- * MODIFIE : l'offre dans Supabase, ferme la modal, recharge la liste
+ * MODIFIE : l'offre dans Supabase, ajoute au journal la liste des champs modifiés,
+ *           ferme la modal, recharge la liste
  */
   async function saveEdit() {
     const id = document.getElementById('edit-id').value;
@@ -1995,7 +2053,8 @@ console.log('Sont différentes:', oldOffer?.image_url !== newImageUrl);
     const ok = await supabaseUpdate('offers', id, data);
     if (ok) {
       showAlert('Offre modifiée avec succès !', 'success');
-      addLog('✏️ Modification offre', `"${document.getElementById('edit-title').value}"`);
+      // Journal : liste des champs réellement modifiés
+      addLog('✏️ Modification offre', `"${data.title}" — ${decrireModifications(oldOffer, data)}`);
       closeModal();
       loadOffers();
     } else {
@@ -2085,14 +2144,15 @@ async function addCategory() {
  * PARAMÈTRES :
  *   - id (string) : UUID de la catégorie à supprimer
  * RETOURNE : rien
- * MODIFIE : supprime la catégorie dans Supabase, recharge la liste
+ * MODIFIE : supprime la catégorie dans Supabase, recharge la liste, ajoute une ligne au journal (logs)
  */
 async function deleteCategory(id) {
+  const cat = allCategories.find(c => c.id === id); // pour un journal lisible (nom plutôt qu'ID)
   if (!confirm('Supprimer cette catégorie ? Les offres associées ne seront pas supprimées.')) return;
   const ok = await supabaseDelete('categories', id);
   if (ok) { 
     showAlert('Catégorie supprimée !', 'success'); loadCategories();
-    addLog('🗑️ Suppression catégorie', `ID: ${id}`);
+    addLog('🗑️ Suppression catégorie', cat ? `"${cat.icon || ''} ${cat.label}"` : `ID: ${id}`);
   }
   else showAlert('Erreur lors de la suppression', 'error');
 }
@@ -2382,13 +2442,16 @@ const ok = await supabaseUpdate('subcategories', id, { label, icon: icon || '�
  * PARAMÈTRES :
  *   - id (string) : UUID de la sous-catégorie à supprimer
  * RETOURNE : rien
- * MODIFIE : supprime la sous-catégorie dans Supabase, recharge la liste
+ * MODIFIE : supprime la sous-catégorie dans Supabase, recharge la liste, ajoute une ligne au journal (logs)
  */
 async function deleteSubcategory(id) {
+  const sub = allSubcategories.find(sc => sc.id === id);
+  const cat = sub ? allCategories.find(c => c.id === sub.category_id) : null;
   if (!confirm('Supprimer cette sous-catégorie ?')) return;
   const ok = await supabaseDelete('subcategories', id);
   if (ok) {
     showAlert('Sous-catégorie supprimée !', 'success');
+    addLog('🗑️ Suppression sous-catégorie', sub ? `"${sub.label}"${cat ? ` (${cat.label})` : ''}` : `ID: ${id}`);
     allSubcategories = await supabaseQuery('subcategories', { select: '*', order: 'position' });
     loadSubcategories(currentCategoryId);
   } else {
@@ -2493,10 +2556,11 @@ async function permanentDelete(id, title) {
  * DESCRIPTION : Vide complètement la poubelle (suppression définitive de toutes les offres supprimées)
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : supprime toutes les offres avec deleted_at non null dans Supabase
+ * MODIFIE : supprime toutes les offres avec deleted_at non null dans Supabase, ajoute une ligne au journal (logs)
  */
 async function emptyTrash() {
   if (!confirm('⚠️ Vider toute la poubelle ? Cette action est IRRÉVERSIBLE !')) return;
+  const nbPoubelle = allOffers.filter(o => o.deleted_at).length; // pour le journal
   const response = await fetch(`${SUPABASE_URL}/rest/v1/offers?deleted_at=not.is.null`, {
     method: 'DELETE',
     headers: {
@@ -2506,6 +2570,7 @@ async function emptyTrash() {
   });
   if (response.ok) {
     showAlert('🗑️ Poubelle vidée !', 'success', 0);
+    addLog('💀 Poubelle vidée', `${nbPoubelle} offre(s) supprimée(s) définitivement`);
     loadTrash();
     loadAll();
   } else {
@@ -2565,7 +2630,7 @@ function changePassword() {
  * DESCRIPTION : Sauvegarde le délai de suppression définitive de la poubelle
  * PARAMÈTRES : aucun (lit #trash-delay)
  * RETOURNE : rien
- * MODIFIE : localStorage clé 'trash_delay'
+ * MODIFIE : localStorage clé 'trash_delay', ajoute une ligne au journal (logs)
  */
 function saveTrashDelay() {
   const delay = parseInt(document.getElementById('trash-delay').value);
@@ -2575,6 +2640,7 @@ function saveTrashDelay() {
   }
   localStorage.setItem('trash_delay', delay);
   showAlert(`✅ Délai sauvegardé : ${delay} jours`, 'success', 0);
+  addLog('⚙️ Paramètre modifié', `Délai de la poubelle : ${delay} jours`);
 }
 
 /**
@@ -2582,7 +2648,7 @@ function saveTrashDelay() {
  * DESCRIPTION : Sauvegarde l'email destinataire des messages de contact
  * PARAMÈTRES : aucun (lit #settings-email)
  * RETOURNE : rien
- * MODIFIE : localStorage clé 'contact_email'
+ * MODIFIE : localStorage clé 'contact_email', ajoute une ligne au journal (logs)
  */
 function saveEmail() {
   const email = document.getElementById('settings-email').value.trim();
@@ -2592,6 +2658,7 @@ function saveEmail() {
   }
   localStorage.setItem('contact_email', email);
   showAlert(`✅ Email sauvegardé : ${email}`, 'success', 0);
+  addLog('⚙️ Paramètre modifié', 'Email de contact mis à jour');
 }
 
 /**
@@ -2882,7 +2949,7 @@ function sqlInsertRow(table, row) {
  * DESCRIPTION : Exporte toutes les offres et catégories en format SQL téléchargeable
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : déclenche un téléchargement de fichier .sql
+ * MODIFIE : déclenche un téléchargement de fichier .sql, ajoute une ligne au journal (logs)
  */
 async function exportSQL() {
   showAlert('⏳ Préparation de l\'export...', 'success', 0);
@@ -2913,6 +2980,7 @@ async function exportSQL() {
   URL.revokeObjectURL(url);
 
   showAlert(`✅ Export téléchargé : ${offers.length} offres, ${categories.length} catégories`, 'success', 0);
+  addLog('💾 Export SQL', `${offers.length} offres, ${categories.length} catégories, ${subcategories.length} sous-catégories`);
 }
 
 /**
