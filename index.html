@@ -1374,6 +1374,40 @@ function togglePassword() {
   }
 }
   
+/**
+ * FONCTION : estCategorieEcartes
+ * DESCRIPTION : Indique si une catégorie est la catégorie virtuelle « E-cartes cadeaux »,
+ *               qui ne contient aucune offre en propre mais regroupe toutes les offres
+ *               marquées is_ecard, quelle que soit leur catégorie réelle
+ * PARAMÈTRES :
+ *   - categoryId (string) : UUID de la catégorie à tester
+ * RETOURNE : boolean - true si c'est la catégorie E-cartes cadeaux
+ * MODIFIE : rien
+ */
+function estCategorieEcartes(categoryId) {
+  const cat = (allCategories || []).find(c => c.id === categoryId);
+  if (!cat) return false;
+  const label = (cat.label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return label.includes('e-carte') || label.includes('ecarte');
+}
+
+/**
+ * FONCTION : offreDansCategorie
+ * DESCRIPTION : Indique si une offre doit apparaître dans une catégorie donnée :
+ *               soit elle y est rangée (category_id), soit c'est la catégorie
+ *               « E-cartes cadeaux » et l'offre est marquée is_ecard
+ * PARAMÈTRES :
+ *   - offer (object) : offre issue de la table offers
+ *   - categoryId (string) : UUID de la catégorie
+ * RETOURNE : boolean - true si l'offre appartient à la catégorie
+ * MODIFIE : rien
+ */
+function offreDansCategorie(offer, categoryId) {
+  if (!offer || !categoryId) return false;
+  if (offer.category_id === categoryId) return true;
+  return !!offer.is_ecard && estCategorieEcartes(categoryId);
+}
+
  /**
  * FONCTION : filterOffers
  * DESCRIPTION : Filtre la liste des offres en temps réel selon la recherche et les filtres
@@ -1402,7 +1436,8 @@ function filterOffers() {
     }
 
     // Filtre catégorie
-    if (categoryFilter && o.category_id !== categoryFilter) return false;
+    // (la catégorie « E-cartes cadeaux » affiche toutes les offres is_ecard)
+    if (categoryFilter && !offreDansCategorie(o, categoryFilter)) return false;
 
     // Filtre statut
     if (statusFilter === 'active' && !o.active) return false;
@@ -1928,7 +1963,7 @@ async function loadCategories() {
     <td><strong>${cat.label}</strong></td>
     <td>
       <span style="background:#E8EDF8;color:#003189;padding:3px 10px;border-radius:12px;font-weight:700;font-size:13px;">
-      ${allOffers.filter(o => o.category_id === cat.id && !o.deleted_at).length}
+      ${allOffers.filter(o => offreDansCategorie(o, cat.id) && !o.deleted_at).length}
       </span>
     </td>
 <td>${cat.position}</td>
@@ -3147,7 +3182,8 @@ function simSelectCategory(categoryId) {
   const catSpan = document.querySelector(`[data-cat-id="${categoryId}"]`);
   if (catSpan) catSpan.style.background = '#FF6B00';
 
-  const filtered = offs.filter(o => o.category_id === categoryId);
+  // Inclut les offres is_ecard quand la catégorie est « E-cartes cadeaux »
+  const filtered = offs.filter(o => offreDansCategorie(o, categoryId));
   const content = document.getElementById('sim-content');
 
   if (!filtered.length) {
