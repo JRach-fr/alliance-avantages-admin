@@ -266,6 +266,7 @@
       <option value="inactive">Inactives</option>
       <option value="flash">Flash</option>
       <option value="new">Nouvelles</option>
+      <option value="expired">⚠️ Périmées</option>
       <!-- E-cartes retiré des statuts (26/10/2026) : utiliser le filtre catégorie « E-cartes cadeaux » -->
     </select>
     <button onclick="resetSearch()" style="background:#6B7280;color:white;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:14px;">✕ Réinitialiser</button>
@@ -1299,8 +1300,8 @@ function togglePassword() {
     const tbody = document.getElementById('dashboard-table');
     tbody.innerHTML = allOffers.slice(0, 10).map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
-      return `<tr>
-        <td><strong>${o.title}</strong></td>
+      return `<tr${styleLigneOffre(o)}>
+        <td><strong>${o.title}</strong>${badgePerimee(o)}</td>
         <td>${o.partner_name}</td>
         <td>${cat ? cat.icon + ' ' + cat.label : '-'}</td>
         <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
@@ -1326,8 +1327,8 @@ function togglePassword() {
     const tbody = document.getElementById('offers-table');
     tbody.innerHTML = allOffers.map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
-      return `<tr>
-        <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong></td>
+      return `<tr${styleLigneOffre(o)}>
+        <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${badgePerimee(o)}</td>
         <td>${o.partner_name}</td>
         <td>${o.city || '-'}</td>
         <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
@@ -1411,6 +1412,52 @@ function offreDansCategorie(offer, categoryId) {
   return !!offer.is_ecard && estCategorieEcartes(categoryId);
 }
 
+/**
+ * FONCTION : estPerimee
+ * DESCRIPTION : Indique si une offre est périmée, c'est-à-dire si sa date
+ *               d'expiration (expires_at) est renseignée et déjà dépassée
+ * PARAMÈTRES :
+ *   - offer (object) : offre issue de la table offers
+ * RETOURNE : boolean - true si l'offre est périmée
+ * MODIFIE : rien
+ */
+function estPerimee(offer) {
+  if (!offer || !offer.expires_at) return false;
+  const fin = new Date(offer.expires_at);
+  return !isNaN(fin.getTime()) && fin.getTime() < Date.now();
+}
+
+/**
+ * FONCTION : styleLigneOffre
+ * DESCRIPTION : Style de la ligne d'une offre dans les tableaux de l'admin :
+ *               fond rouge clair si l'offre est périmée ET encore marquée active
+ *               (anomalie à corriger : elle est toujours visible dans l'app)
+ * PARAMÈTRES :
+ *   - offer (object) : offre issue de la table offers
+ * RETOURNE : string - attribut style à insérer dans <tr> (chaîne vide sinon)
+ * MODIFIE : rien
+ */
+function styleLigneOffre(offer) {
+  return estPerimee(offer) && offer.active
+    ? ' style="background:#FEE2E2;" title="Offre périmée mais encore active : à désactiver"'
+    : '';
+}
+
+/**
+ * FONCTION : badgePerimee
+ * DESCRIPTION : Triangle d'attention ⚠️ affiché à côté du titre d'une offre périmée,
+ *               avec la date d'expiration au survol
+ * PARAMÈTRES :
+ *   - offer (object) : offre issue de la table offers
+ * RETOURNE : string - HTML du badge (chaîne vide si l'offre n'est pas périmée)
+ * MODIFIE : rien
+ */
+function badgePerimee(offer) {
+  if (!estPerimee(offer)) return '';
+  const date = new Date(offer.expires_at).toLocaleDateString('fr-FR');
+  return ` <span title="Offre périmée depuis le ${date}" style="color:#DC2626;font-size:15px;cursor:help;">⚠️</span>`;
+}
+
  /**
  * FONCTION : filterOffers
  * DESCRIPTION : Filtre la liste des offres en temps réel selon la recherche et les filtres
@@ -1447,6 +1494,7 @@ function filterOffers() {
     if (statusFilter === 'inactive' && o.active) return false;
     if (statusFilter === 'flash' && !o.flash) return false;
     if (statusFilter === 'new' && !o.is_new) return false;
+    if (statusFilter === 'expired' && !estPerimee(o)) return false; // date d'expiration dépassée
     // Les e-cartes se filtrent via la catégorie « E-cartes cadeaux » (voir offreDansCategorie)
 
     return true;
@@ -1467,8 +1515,8 @@ function filterOffers() {
 
   tbody.innerHTML = filtered.map(o => {
     const cat = allCategories.find(c => c.id === o.category_id);
-    return `<tr>
-      <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${cat ? `<br><small style="color:#9CA3AF;">${cat.icon} ${cat.label}</small>` : ''}</td>      <td>${o.partner_name}</td>
+    return `<tr${styleLigneOffre(o)}>
+      <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${badgePerimee(o)}${cat ? `<br><small style="color:#9CA3AF;">${cat.icon} ${cat.label}</small>` : ''}</td>      <td>${o.partner_name}</td>
       <td>${o.city || '-'}</td>
       <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
       <td>
@@ -1525,11 +1573,19 @@ function resetSearch() {
  *   - field (string) : nom du champ à modifier (flash, active, is_new)
  *   - value (boolean) : nouvelle valeur
  * RETOURNE : rien
- * MODIFIE : le champ correspondant dans Supabase, affiche une alerte
+ * MODIFIE : le champ correspondant dans Supabase, la copie locale dans allOffers,
+ *           affiche une alerte ; réaffiche la liste si le champ est « active »
  */
   async function toggleField(id, field, value) {
     const ok = await supabaseUpdate('offers', id, { [field]: value });
-    if (ok) showAlert('Offre mise à jour !', 'success');
+    if (ok) {
+      showAlert('Offre mise à jour !', 'success');
+      // Met à jour la copie locale de l'offre puis réaffiche la liste (filtres conservés) :
+      // le fond rouge d'une offre périmée disparaît dès qu'on la désactive
+      const offer = allOffers.find(o => o.id === id);
+      if (offer) offer[field] = value;
+      if (field === 'active' && typeof filterOffers === 'function') filterOffers();
+    }
     else showAlert('Erreur lors de la mise à jour', 'error');
   }
 
