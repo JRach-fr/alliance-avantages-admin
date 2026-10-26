@@ -1278,7 +1278,7 @@ function togglePassword() {
  * MODIFIE : variables globales allOffers, allCategories, allSubcategories, lance loadDashboard()
  */
   async function loadAll() {
-    allOffers = await supabaseQuery('offers', { select: '*', order: 'created_at.desc' });
+    allOffers = await supabaseQuery('offers', { select: '*', order: 'created_at.desc,title.asc' }); // plus récentes d'abord, titre en départage (ordre stable)
     allCategories = await supabaseQuery('categories', { select: '*', order: 'position' });
     allSubcategories = await supabaseQuery('subcategories', { select: '*', order: 'position' });
     loadDashboard();
@@ -1328,7 +1328,7 @@ function togglePassword() {
  */
   
   async function loadOffers() {
-    allOffers = await supabaseQuery('offers', { select: '*', order: 'created_at.desc' });
+    allOffers = await supabaseQuery('offers', { select: '*', order: 'created_at.desc,title.asc' }); // plus récentes d'abord, titre en départage (ordre stable)
     const tbody = document.getElementById('offers-table');
     tbody.innerHTML = allOffers.map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
@@ -3228,7 +3228,7 @@ async function loadSimulator() {
   // Charge les données
   const [cats, offs, banners, subs] = await Promise.all([
     supabaseQuery('categories', { select: '*', order: 'position' }),
-    supabaseQuery('offers', { select: '*', order: 'flash.desc' }),
+    supabaseQuery('offers', { select: '*', order: 'flash.desc,position.asc,title.asc' }), // même tri que l'app mobile
     supabaseQuery('banners', { select: '*' }),
     supabaseQuery('subcategories', { select: '*', order: 'position' }),
   ]);
