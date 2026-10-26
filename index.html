@@ -826,6 +826,9 @@
             <span style="display:inline-block;background:#FF6B00;color:white;padding:4px 10px;border-radius:8px;font-size:10px;margin-right:6px;cursor:pointer;">🏠 Accueil</span>
           </div>
 
+          <!-- Sous-catégories : barre fixe de hauteur constante, vide si la catégorie n'en a pas -->
+          <div id="sim-subcategories" style="background:#FFFFFF;height:34px;box-sizing:border-box;padding:0 8px;display:flex;align-items:center;gap:6px;overflow-x:auto;overflow-y:hidden;white-space:nowrap;border-bottom:1px solid #E5E7EB;flex-shrink:0;scrollbar-width:none;"></div>
+
           <!-- Contenu scrollable -->
           <div style="flex:1;overflow-y:auto;overflow-x:hidden;" id="sim-content">
             <div style="text-align:center;padding:40px;color:#9CA3AF;font-size:13px;">
@@ -3076,10 +3079,11 @@ async function loadSimulator() {
  *   - newOffers (array) : offres marquées is_new
  *   - activeBanner (object|null) : bannière active ou null
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-content, window._simNav (remis à null : on est sur l'accueil)
+ * MODIFIE : contenu de #sim-content, #sim-subcategories (vidée), window._simNav (remis à null)
  */
 function simShowHome(newOffers, activeBanner) {
   window._simNav = null;
+  simAfficherSousCategories(null, null); // accueil : barre des sous-catégories vide
   const content = document.getElementById('sim-content');
 
   const offersHtml = newOffers.length > 0 ? `
@@ -3176,11 +3180,12 @@ function formatLieu(city, partnerName) {
  *   - subcategoryId (string|null) : UUID de la sous-catégorie sélectionnée,
  *                                   ou null/absent pour « Toutes »
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-content, style des boutons catégories, window._simNav
+ * MODIFIE : contenu de #sim-content et #sim-subcategories, style des boutons catégories,
+ *           window._simNav
  */
 function simSelectCategory(categoryId, subcategoryId = null) {
   if (!window._simData) return;
-  const { offs, subs, activeBanner, newOffers } = window._simData;
+  const { offs, activeBanner, newOffers } = window._simData;
 
   // Met à jour le style des catégories
   document.querySelectorAll('#sim-categories span').forEach(span => {
@@ -3202,17 +3207,8 @@ function simSelectCategory(categoryId, subcategoryId = null) {
   // Offres de la catégorie (inclut les offres is_ecard pour « E-cartes cadeaux »)
   const offresCategorie = offs.filter(o => offreDansCategorie(o, categoryId));
 
-  // Sous-catégories actives de la catégorie (aucune pour E-cartes, Concerts, Métier…)
-  const sousCategories = (subs || []).filter(sc => sc.category_id === categoryId && sc.active);
-
-  // Barre des sous-catégories : « Toutes » + une puce par sous-catégorie
-  const chip = (label, actif, onclick) => `
-    <span onclick="${onclick}" style="display:inline-block;background:${actif ? '#003189' : '#FFFFFF'};color:${actif ? '#FFFFFF' : '#003189'};border:1px solid #003189;padding:3px 9px;border-radius:12px;font-size:9px;font-weight:600;margin-right:5px;cursor:pointer;">${label}</span>`;
-  const barreSousCategories = sousCategories.length ? `
-    <div style="background:#FFFFFF;padding:6px 8px;overflow-x:auto;white-space:nowrap;border-bottom:1px solid #E5E7EB;">
-      ${chip('Toutes', !subcategoryId, `simSelectCategory('${categoryId}')`)}
-      ${sousCategories.map(sc => chip(`${sc.icon || ''} ${sc.label}`, subcategoryId === sc.id, `simSelectCategory('${categoryId}','${sc.id}')`)).join('')}
-    </div>` : '';
+  // Barre fixe des sous-catégories (vide si la catégorie n'en a pas)
+  simAfficherSousCategories(categoryId, subcategoryId);
 
   // Filtre éventuel par sous-catégorie
   const filtered = subcategoryId
@@ -3221,12 +3217,12 @@ function simSelectCategory(categoryId, subcategoryId = null) {
   const content = document.getElementById('sim-content');
 
   if (!filtered.length) {
-    content.innerHTML = barreSousCategories +
+    content.innerHTML =
       '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">Aucune offre dans cette catégorie</div>';
     return;
   }
 
-  content.innerHTML = barreSousCategories + filtered.map(o => `
+  content.innerHTML = filtered.map(o => `
     <div onclick="simShowOffer('${o.id}')" style="background:white;margin:6px 8px;border-radius:10px;padding:10px;border-left:3px solid ${o.flash ? '#FF6B00' : '#003189'};cursor:pointer;box-shadow:0 1px 4px rgba(0,49,137,0.08);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         ${o.flash ? '<span style="background:#FF6B00;color:white;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:800;">FLASH</span>' : '<span></span>'}
@@ -3236,6 +3232,47 @@ function simSelectCategory(categoryId, subcategoryId = null) {
       <div style="font-size:10px;color:#9CA3AF;">${formatLieu(o.city, o.partner_name)}</div>
     </div>
   `).join('');
+}
+
+/**
+ * FONCTION : simAfficherSousCategories
+ * DESCRIPTION : Remplit la barre fixe des sous-catégories du simulateur (sous les catégories).
+ *               La barre garde toujours la même hauteur : elle reste vide sur l'accueil et
+ *               pour les catégories sans sous-catégorie (E-cartes cadeaux, Concerts, Métier…),
+ *               ce qui évite que le contenu se décale d'une catégorie à l'autre.
+ * PARAMÈTRES :
+ *   - categoryId (string|null) : UUID de la catégorie affichée, ou null (accueil)
+ *   - subcategoryId (string|null) : UUID de la sous-catégorie sélectionnée, ou null (« Toutes »)
+ * RETOURNE : rien
+ * MODIFIE : contenu de #sim-subcategories
+ */
+function simAfficherSousCategories(categoryId, subcategoryId) {
+  const barre = document.getElementById('sim-subcategories');
+  if (!barre) return;
+  const subs = (window._simData && window._simData.subs) || [];
+  const sousCategories = categoryId
+    ? subs.filter(sc => sc.category_id === categoryId && sc.active)
+    : [];
+
+  if (!sousCategories.length) {
+    barre.innerHTML = '';
+    return;
+  }
+
+  // Puce de sous-catégorie : pleine si sélectionnée, contour sinon
+  const puce = (label, actif, onclick) => `
+    <span onclick="${onclick}" style="flex-shrink:0;display:inline-flex;align-items:center;height:22px;background:${actif ? '#003189' : '#FFFFFF'};color:${actif ? '#FFFFFF' : '#003189'};border:1px solid #003189;padding:0 10px;border-radius:11px;font-size:10px;font-weight:600;cursor:pointer;">${label}</span>`;
+
+  barre.innerHTML =
+    puce('Toutes', !subcategoryId, `simSelectCategory('${categoryId}')`) +
+    sousCategories.map(sc =>
+      puce(`${sc.icon || ''} ${sc.label}`.trim(), subcategoryId === sc.id, `simSelectCategory('${categoryId}','${sc.id}')`)
+    ).join('');
+
+  // Garde la puce sélectionnée visible si la barre défile
+  const selection = barre.querySelector('span[style*="background:#003189"]');
+  // (défilement horizontal de la barre uniquement, sans faire bouger la page de l'admin)
+  if (selection) barre.scrollLeft = Math.max(0, selection.offsetLeft - barre.offsetLeft - 8);
 }
 
 /**
