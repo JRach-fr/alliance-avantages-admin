@@ -352,7 +352,7 @@
             <label>Image</label>
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <input type="file" id="new-image-file" accept="image/jpeg,image/png,image/jpg" onchange="uploadImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
-                <small style="color:#9CA3AF;">Format recommandé : JPG, 800x450px (16:9). Taille max : 1MB.</small>
+                <small style="color:#9CA3AF;">Format recommandé : JPG, 1200x675px (16:9). Taille max : 1MB.</small>
                 <input type="url" id="new-image-url" placeholder="Ou collez une URL directement...">
                 <div id="upload-status" style="font-size:12px;color:#6B7280;display:none;"></div>
                 <img id="image-preview-thumb" src="" style="display:none;width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:4px;">
@@ -543,7 +543,7 @@
   <h3>🎄 Bannières événement</h3>
   <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">
     Préparez vos bannières à l'avance et activez-les quand vous voulez.
-    <br><strong>Proportion recommandée : 16:9 (ex: 800x450px)</strong>
+    <br><strong>Proportion recommandée : 16:9 (ex: 1200x675px)</strong>
   </p>
 
   <!-- Formulaire ajout bannière -->
@@ -563,7 +563,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="file" id="banner-image-file" accept="image/jpeg,image/png,image/jpg" onchange="uploadBannerImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
           <input type="url" id="banner-image-url" placeholder="Ou collez une URL directement...">
-          <small style="color:#9CA3AF;">Format recommandé : JPG, 800x450px (16:9). Taille max : 1MB.</small>
+          <small style="color:#9CA3AF;">Format recommandé : JPG, 1200x675px (16:9). Taille max : 1MB.</small>
           <div id="banner-upload-status" style="font-size:12px;display:none;"></div>
           <img id="banner-image-thumb" src="" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:8px;">
         </div>
@@ -952,7 +952,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="file" id="edit-banner-image-file" accept="image/jpeg,image/png,image/jpg" onchange="uploadEditBannerImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
           <input type="url" id="edit-banner-image-url" placeholder="Ou collez une URL directement...">
-          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Format : JPG, 800x450px.</small>
+          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Format : JPG, 1200x675px.</small>
           <div id="edit-banner-upload-status" style="font-size:12px;display:none;"></div>
           <img id="edit-banner-image-thumb" src="" style="display:none;width:100%;max-height:120px;object-fit:cover;border-radius:8px;">
         </div>
@@ -1037,7 +1037,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="file" id="edit-image-file" accept="image/jpeg,image/png,image/jpg" onchange="uploadEditOfferImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
           <input type="url" id="edit-image-url" placeholder="Ou collez une URL directement...">
-          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Format : JPG, 800x450px.</small>
+          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Format : JPG, 1200x675px.</small>
           <div id="edit-offer-upload-status" style="font-size:12px;display:none;"></div>
           <img id="edit-offer-image-thumb" src="" style="display:none;width:100%;max-height:120px;object-fit:cover;border-radius:8px;">
         </div>
@@ -1781,7 +1781,7 @@ function decrireModifications(avant, apres) {
   status.style.color = '#6B7280';
   status.textContent = '⏳ Upload en cours...';
 
-  const fileName = Date.now() + '-' + file.name.replace(/\s/g, '-');
+  const fileName = Date.now() + '-' + nomFichierPropre(file.name);
   const uploadUrl = `${SUPABASE_URL}/storage/v1/object/offers-images/${fileName}`;
 
   try {
@@ -1811,6 +1811,29 @@ function decrireModifications(avant, apres) {
     status.style.color = '#991B1B';
     status.textContent = '❌ Erreur réseau.';
   }
+}
+
+/**
+ * FONCTION : nomFichierPropre
+ * DESCRIPTION : Nettoie le nom d'un fichier image avant son envoi dans Supabase Storage :
+ *               minuscules, accents retirés, espaces et caractères spéciaux remplacés par
+ *               des tirets (évite les liens d'image cassés). L'extension est conservée.
+ *               Ex. « Nature & Découvertes (logo).PNG » → « nature-decouvertes-logo.png »
+ * PARAMÈTRES :
+ *   - nom (string) : nom d'origine du fichier
+ * RETOURNE : string - nom nettoyé (« image » + extension si le nom devient vide)
+ * MODIFIE : rien
+ */
+function nomFichierPropre(nom) {
+  const point = nom.lastIndexOf('.');
+  const base = point > 0 ? nom.slice(0, point) : nom;
+  const ext = point > 0 ? nom.slice(point + 1).toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+  const propre = base
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // retire les accents
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')                       // tout le reste → tiret
+    .replace(/^-+|-+$/g, '') || 'image';
+  return ext ? `${propre}.${ext}` : propre;
 }
 
   /**
@@ -2681,7 +2704,7 @@ async function uploadBannerImage(input) {
   status.style.color = '#6B7280';
   status.textContent = '⏳ Upload en cours...';
 
-  const fileName = 'banner-' + Date.now() + '-' + file.name.replace(/\s/g, '-');
+  const fileName = 'banner-' + Date.now() + '-' + nomFichierPropre(file.name);
   const uploadUrl = `${SUPABASE_URL}/storage/v1/object/offers-images/${fileName}`;
 
   try {
@@ -3512,7 +3535,7 @@ async function uploadEditBannerImage(input) {
   status.style.color = '#6B7280';
   status.textContent = '⏳ Upload en cours...';
 
-  const fileName = 'banner-' + Date.now() + '-' + file.name.replace(/\s/g, '-');
+  const fileName = 'banner-' + Date.now() + '-' + nomFichierPropre(file.name);
   const uploadUrl = `${SUPABASE_URL}/storage/v1/object/offers-images/${fileName}`;
 
   try {
@@ -3744,7 +3767,7 @@ async function uploadEditOfferImage(input) {
   status.style.color = '#6B7280';
   status.textContent = '⏳ Upload en cours...';
 
-  const fileName = 'offer-' + Date.now() + '-' + file.name.replace(/\s/g, '-');
+  const fileName = 'offer-' + Date.now() + '-' + nomFichierPropre(file.name);
   const uploadUrl = `${SUPABASE_URL}/storage/v1/object/offers-images/${fileName}`;
 
   try {
