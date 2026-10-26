@@ -1723,8 +1723,8 @@ function toggleCityInput(value) {
     ${imageUrl ? `<img src="${imageUrl}" style="width:100%;height:160px;object-fit:contain;background:#F4F6FB;border-radius:10px;margin-bottom:12px;" onerror="this.style.display='none'">` : ''}    <div style="font-size:15px;font-weight:700;color:#001F5E;margin-bottom:4px;line-height:20px;">${title || 'Titre de l\'offre'}</div>
     <div style="font-size:13px;color:#6B7280;margin-bottom:12px;line-height:18px;">${description || 'Description de l\'offre...'}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div style="font-size:12px;color:#9CA3AF;">📍 ${city || 'En ligne'} · ${partnerName || 'Partenaire'}</div>
-      <span style="background:#FF6B00;color:white;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;">${discount || '-'}</span>
+      <div style="font-size:12px;color:#9CA3AF;">${formatLieu(city, partnerName || 'Partenaire')}</div>
+      ${discount ? `<span style="background:#FF6B00;color:white;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;">${discount}</span>` : ''}
     </div>
     ${daysLeft !== null ? `<div style="margin-top:8px;font-size:12px;color:${daysLeft <= 7 ? '#EF4444' : '#9CA3AF'};">⏱️ ${daysLeft <= 0 ? 'Expire aujourd\'hui !' : daysLeft + ' jours restants'}</div>` : ''}
   `;
@@ -3074,8 +3074,8 @@ function simShowHome(newOffers, activeBanner) {
                 ${featuredOffer.title.substring(0, 60)}${featuredOffer.title.length > 60 ? '...' : ''}
               </div>
               <div style="display:flex;justify-content:space-between;align-items:center;">
-                <span style="color:#93C5FD;font-size:10px;">📍 ${featuredOffer.city} · ${featuredOffer.partner_name}</span>
-                <span style="background:#FF6B00;color:white;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;">${featuredOffer.discount || ''}</span>
+                <span style="color:#93C5FD;font-size:10px;">${formatLieu(featuredOffer.city, featuredOffer.partner_name)}</span>
+                ${featuredOffer.discount ? `<span style="background:#FF6B00;color:white;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:700;">${featuredOffer.discount}</span>` : ''}
               </div>
             </div>
             <div style="background:#FF6B00;color:white;padding:8px;text-align:center;font-size:11px;font-weight:700;">
@@ -3101,6 +3101,24 @@ function simShowHome(newOffers, activeBanner) {
       `;
   }
     content.innerHTML = offersHtml + bannerHtml;
+}
+
+/**
+ * FONCTION : formatLieu
+ * DESCRIPTION : Construit la ligne « 📍 ville · partenaire » d'une offre en masquant
+ *               le 📍 et le séparateur quand la ville est vide (offres nationales)
+ * PARAMÈTRES :
+ *   - city (string|null) : ville de l'offre (peut être vide)
+ *   - partnerName (string|null) : nom du partenaire (optionnel)
+ * RETOURNE : string - texte à afficher (chaîne vide si ni ville ni partenaire)
+ * MODIFIE : rien
+ */
+function formatLieu(city, partnerName) {
+  const ville = (city || '').trim();
+  const partenaire = (partnerName || '').trim();
+  if (ville && partenaire) return `📍 ${ville} · ${partenaire}`;
+  if (ville) return `📍 ${ville}`;
+  return partenaire;
 }
 
 /**
@@ -3144,7 +3162,7 @@ function simSelectCategory(categoryId) {
         ${o.discount ? `<span style="background:#FF6B00;color:white;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;">${o.discount}</span>` : ''}
       </div>
       <div style="font-size:11px;font-weight:700;color:#001F5E;margin-bottom:2px;">${o.title.substring(0,50)}${o.title.length>50?'...':''}</div>
-      <div style="font-size:10px;color:#9CA3AF;">📍 ${o.city} · ${o.partner_name}</div>
+      <div style="font-size:10px;color:#9CA3AF;">${formatLieu(o.city, o.partner_name)}</div>
     </div>
   `).join('');
 }
@@ -3171,7 +3189,7 @@ function simShowOffer(offerId) {
       ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
       <div style="font-size:14px;font-weight:700;color:#001F5E;margin-bottom:4px;">${offer.title}</div>
       <div style="font-size:11px;color:#6B7280;margin-bottom:10px;">par ${offer.partner_name}</div>
-      <div style="font-size:11px;color:#374151;margin-bottom:6px;">📍 ${offer.city}</div>
+      ${offer.city ? `<div style="font-size:11px;color:#374151;margin-bottom:6px;">📍 ${offer.city}</div>` : ''}
       <div style="height:1px;background:#F3F4F6;margin:10px 0;"></div>
       <div style="font-size:11px;color:#4B5563;line-height:16px;margin-bottom:10px;">${offer.description || ''}</div>
       <div style="background:#FF6B00;color:white;padding:10px;border-radius:10px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;">
@@ -3432,7 +3450,7 @@ function openOfferPreview(id) {
     ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
     <div style="font-size:14px;font-weight:700;color:#001F5E;margin-bottom:4px;line-height:20px;">${offer.title}</div>
     <div style="font-size:11px;color:#6B7280;margin-bottom:8px;">par ${offer.partner_name}</div>
-    <div style="font-size:11px;color:#374151;margin-bottom:4px;">📍 ${offer.city || 'En ligne'}</div>
+    ${offer.city ? `<div style="font-size:11px;color:#374151;margin-bottom:4px;">📍 ${offer.city}</div>` : ''}
     ${offer.promo_code ? `<div style="background:#E8EDF8;color:#003189;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;display:inline-block;margin:6px 0;">🎟️ Code : ${offer.promo_code}</div>` : ''}
     <div style="height:1px;background:#E5E7EB;margin:10px 0;"></div>
     <div style="font-size:11px;color:#4B5563;line-height:16px;margin-bottom:12px;">${offer.description || ''}</div>
