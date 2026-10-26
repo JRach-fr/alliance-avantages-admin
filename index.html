@@ -3014,14 +3014,17 @@ async function refreshSimulator() {
  *               Affiche les catégories, offres du moment et bannière active
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-categories, #sim-content, #sim-info, #sim-banner-info
+ * MODIFIE : contenu de #sim-categories, #sim-content, #sim-info, #sim-banner-info,
+ *           variables globales window._simData (catégories, sous-catégories, offres, bannière)
+ *           et window._simNav (réinitialisée)
  */
 async function loadSimulator() {
   // Charge les données
-  const [cats, offs, banners] = await Promise.all([
+  const [cats, offs, banners, subs] = await Promise.all([
     supabaseQuery('categories', { select: '*', order: 'position' }),
     supabaseQuery('offers', { select: '*', order: 'flash.desc' }),
     supabaseQuery('banners', { select: '*' }),
+    supabaseQuery('subcategories', { select: '*', order: 'position' }),
   ]);
 
   const activeBanner = banners.find(b => b.active);
@@ -3056,11 +3059,13 @@ async function loadSimulator() {
     document.getElementById('sim-banner-info').innerHTML = '<span style="color:#9CA3AF;">Aucune bannière active</span>';
   }
 
+  // Stocke les données pour navigation AVANT l'affichage de l'accueil
+  // (sinon l'offre vedette de la bannière est introuvable au premier chargement)
+  window._simData = { cats, subs: subs || [], offs: activeOffers, activeBanner, newOffers };
+  window._simNav = null;
+
   // Affiche l'écran accueil par défaut
   simShowHome(newOffers, activeBanner);
-
-  // Stocke les données pour navigation
-  window._simData = { cats, offs: activeOffers, activeBanner, newOffers };
 }
 
 /**
@@ -3071,9 +3076,10 @@ async function loadSimulator() {
  *   - newOffers (array) : offres marquées is_new
  *   - activeBanner (object|null) : bannière active ou null
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-content
+ * MODIFIE : contenu de #sim-content, window._simNav (remis à null : on est sur l'accueil)
  */
 function simShowHome(newOffers, activeBanner) {
+  window._simNav = null;
   const content = document.getElementById('sim-content');
 
   const offersHtml = newOffers.length > 0 ? `
@@ -3128,10 +3134,14 @@ function simShowHome(newOffers, activeBanner) {
         </div>
       `;
   } else {
-      // Placeholder — aucune bannière active
+      // Placeholder — aucune bannière active : logo Alliance Avantages en filigrane
+      // (même rendu que l'app mobile ; logo.jpg du dépôt en secours si Supabase ne répond pas)
       bannerHtml = `
-        <div style="margin:8px 10px;border-radius:10px;background:#FFFFFF;height:120px;display:flex;justify-content:center;align-items:center;border:1px solid #E5E7EB;">
-          <span style="color:#E5E7EB;font-size:30px;">🖼️</span>
+        <div style="margin:8px 10px;border-radius:10px;background:#FFFFFF;height:120px;display:flex;justify-content:center;align-items:center;border:1px solid #E5E7EB;overflow:hidden;">
+          <img src="https://nbgnijldoxpxzulovqlz.supabase.co/storage/v1/object/public/offers-images/logo.jpg"
+               alt="Alliance Avantages"
+               style="max-height:90px;max-width:80%;object-fit:contain;opacity:0.18;"
+               onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='logo.jpg';}else{this.style.display='none';}">
         </div>
       `;
   }
@@ -3158,15 +3168,19 @@ function formatLieu(city, partnerName) {
 
 /**
  * FONCTION : simSelectCategory
- * DESCRIPTION : Affiche les offres d'une catégorie dans le simulateur
+ * DESCRIPTION : Affiche les offres d'une catégorie dans le simulateur, avec la barre
+ *               des sous-catégories (comme dans l'app) quand la catégorie en possède.
+ *               Mémorise la page affichée pour que « ← Retour » d'une fiche offre y revienne.
  * PARAMÈTRES :
  *   - categoryId (string|null) : UUID de la catégorie ou null pour revenir à l'accueil
+ *   - subcategoryId (string|null) : UUID de la sous-catégorie sélectionnée,
+ *                                   ou null/absent pour « Toutes »
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-content, style des boutons catégories
+ * MODIFIE : contenu de #sim-content, style des boutons catégories, window._simNav
  */
-function simSelectCategory(categoryId) {
+function simSelectCategory(categoryId, subcategoryId = null) {
   if (!window._simData) return;
-  const { cats, offs, activeBanner, newOffers } = window._simData;
+  const { offs, subs, activeBanner, newOffers } = window._simData;
 
   // Met à jour le style des catégories
   document.querySelectorAll('#sim-categories span').forEach(span => {
@@ -3182,16 +3196,37 @@ function simSelectCategory(categoryId) {
   const catSpan = document.querySelector(`[data-cat-id="${categoryId}"]`);
   if (catSpan) catSpan.style.background = '#FF6B00';
 
-  // Inclut les offres is_ecard quand la catégorie est « E-cartes cadeaux »
-  const filtered = offs.filter(o => offreDansCategorie(o, categoryId));
+  // Mémorise la page courante pour le bouton « ← Retour » de la fiche offre
+  window._simNav = { categoryId, subcategoryId };
+
+  // Offres de la catégorie (inclut les offres is_ecard pour « E-cartes cadeaux »)
+  const offresCategorie = offs.filter(o => offreDansCategorie(o, categoryId));
+
+  // Sous-catégories actives de la catégorie (aucune pour E-cartes, Concerts, Métier…)
+  const sousCategories = (subs || []).filter(sc => sc.category_id === categoryId && sc.active);
+
+  // Barre des sous-catégories : « Toutes » + une puce par sous-catégorie
+  const chip = (label, actif, onclick) => `
+    <span onclick="${onclick}" style="display:inline-block;background:${actif ? '#003189' : '#FFFFFF'};color:${actif ? '#FFFFFF' : '#003189'};border:1px solid #003189;padding:3px 9px;border-radius:12px;font-size:9px;font-weight:600;margin-right:5px;cursor:pointer;">${label}</span>`;
+  const barreSousCategories = sousCategories.length ? `
+    <div style="background:#FFFFFF;padding:6px 8px;overflow-x:auto;white-space:nowrap;border-bottom:1px solid #E5E7EB;">
+      ${chip('Toutes', !subcategoryId, `simSelectCategory('${categoryId}')`)}
+      ${sousCategories.map(sc => chip(`${sc.icon || ''} ${sc.label}`, subcategoryId === sc.id, `simSelectCategory('${categoryId}','${sc.id}')`)).join('')}
+    </div>` : '';
+
+  // Filtre éventuel par sous-catégorie
+  const filtered = subcategoryId
+    ? offresCategorie.filter(o => o.subcategory_id === subcategoryId)
+    : offresCategorie;
   const content = document.getElementById('sim-content');
 
   if (!filtered.length) {
-    content.innerHTML = '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">Aucune offre dans cette catégorie</div>';
+    content.innerHTML = barreSousCategories +
+      '<div style="text-align:center;padding:40px;color:#9CA3AF;font-size:12px;">Aucune offre dans cette catégorie</div>';
     return;
   }
 
-  content.innerHTML = filtered.map(o => `
+  content.innerHTML = barreSousCategories + filtered.map(o => `
     <div onclick="simShowOffer('${o.id}')" style="background:white;margin:6px 8px;border-radius:10px;padding:10px;border-left:3px solid ${o.flash ? '#FF6B00' : '#003189'};cursor:pointer;box-shadow:0 1px 4px rgba(0,49,137,0.08);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         ${o.flash ? '<span style="background:#FF6B00;color:white;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:800;">FLASH</span>' : '<span></span>'}
@@ -3201,6 +3236,24 @@ function simSelectCategory(categoryId) {
       <div style="font-size:10px;color:#9CA3AF;">${formatLieu(o.city, o.partner_name)}</div>
     </div>
   `).join('');
+}
+
+/**
+ * FONCTION : simRetour
+ * DESCRIPTION : Bouton « ← Retour » de la fiche offre du simulateur : revient à la page
+ *               précédente (catégorie et sous-catégorie consultées) ou à l'accueil si
+ *               l'offre a été ouverte depuis l'accueil (offres du moment, bannière)
+ * PARAMÈTRES : aucun (lit window._simNav)
+ * RETOURNE : rien
+ * MODIFIE : contenu de #sim-content (via simSelectCategory)
+ */
+function simRetour() {
+  const nav = window._simNav;
+  if (nav && nav.categoryId) {
+    simSelectCategory(nav.categoryId, nav.subcategoryId);
+  } else {
+    simSelectCategory(null);
+  }
 }
 
 /**
@@ -3219,7 +3272,7 @@ function simShowOffer(offerId) {
   const content = document.getElementById('sim-content');
   content.innerHTML = `
     <div style="padding:10px;">
-      <div onclick="simSelectCategory(null)" style="color:#003189;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;">← Retour</div>
+      <div onclick="simRetour()" style="color:#003189;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;">← Retour</div>
       ${offer.image_url ? `<img src="${offer.image_url}" style="width:100%;border-radius:10px;margin-bottom:10px;" onerror="this.style.display='none'">` : ''}
       ${offer.flash ? '<span style="background:#FF6B00;color:white;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;">VENTE FLASH</span><br><br>' : ''}
       ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
