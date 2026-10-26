@@ -266,7 +266,7 @@
       <option value="inactive">Inactives</option>
       <option value="flash">Flash</option>
       <option value="new">Nouvelles</option>
-      <option value="ecard">E-cartes</option>
+      <!-- E-cartes retiré des statuts (26/10/2026) : utiliser le filtre catégorie « E-cartes cadeaux » -->
     </select>
     <button onclick="resetSearch()" style="background:#6B7280;color:white;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:14px;">✕ Réinitialiser</button>
   </div>
@@ -1444,7 +1444,7 @@ function filterOffers() {
     if (statusFilter === 'inactive' && o.active) return false;
     if (statusFilter === 'flash' && !o.flash) return false;
     if (statusFilter === 'new' && !o.is_new) return false;
-    if (statusFilter === 'ecard' && !o.is_ecard) return false;
+    // Les e-cartes se filtrent via la catégorie « E-cartes cadeaux » (voir offreDansCategorie)
 
     return true;
   });
