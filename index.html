@@ -819,8 +819,8 @@
             <span style="font-size:11px;">📶 🔋</span>
           </div>
 
-          <!-- Header logo -->
-          <div style="background:#FFFFFF;padding:8px 12px;border-bottom:1px solid #E5E7EB;flex-shrink:0;">
+          <!-- Header logo (masqué sur la fiche offre, comme dans l'app) -->
+          <div id="sim-header" style="background:#FFFFFF;padding:8px 12px;border-bottom:1px solid #E5E7EB;flex-shrink:0;">
             <img src="https://nbgnijldoxpxzulovqlz.supabase.co/storage/v1/object/public/offers-images/logo.jpg" 
                  style="height:32px;object-fit:contain;"
                  onerror="this.style.display='none'">
@@ -841,8 +841,8 @@
             </div>
           </div>
 
-          <!-- Barre de navigation -->
-          <div style="background:#003189;padding:8px 0;display:flex;justify-content:space-around;flex-shrink:0;">
+          <!-- Barre de navigation (masquée sur la fiche offre, comme dans l'app) -->
+          <div id="sim-nav" style="background:#003189;padding:8px 0;display:flex;justify-content:space-around;flex-shrink:0;">
             <div onclick="simNavigate('home')" style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;" id="sim-nav-home">
               <span style="font-size:16px;">🏠</span>
               <span style="font-size:8px;color:#FF6B00;font-weight:600;">Accueil</span>
@@ -891,7 +891,7 @@
 <!--
   COMPOSANT  : Modal aperçu mobile
   DESCRIPTION : Affiche une offre telle qu'elle apparaît sur l'application mobile
-                Réutilise le rendu du simulateur dans un cadre téléphone
+                Même rendu que la fiche du simulateur (rendreFicheOffreMobile)
   DÉCLENCHÉ  : Au clic sur le titre d'une offre dans le tableau des offres
 -->
 <div class="modal-overlay" id="offer-preview-modal">
@@ -919,12 +919,8 @@
           <span style="font-size:10px;font-weight:600;">15:00</span>
           <span style="font-size:10px;">📶 🔋</span>
         </div>
-        <!-- Header logo -->
-        <div style="background:#FFFFFF;padding:6px 10px;border-bottom:1px solid #E5E7EB;">
-          <img src="logo.jpg" style="height:26px;object-fit:contain;" onerror="this.style.display='none'">
-        </div>
-        <!-- Contenu offre -->
-        <div id="offer-preview-content" style="padding:12px;background:#F4F6FB;min-height:200px;">
+        <!-- Fiche offre : même rendu que l'écran offre de l'app (rendreFicheOffreMobile) -->
+        <div id="offer-preview-content" style="height:560px;display:flex;flex-direction:column;background:#FFFFFF;">
         </div>
       </div>
     </div>
@@ -3282,10 +3278,12 @@ async function loadSimulator() {
  *   - newOffers (array) : offres marquées is_new
  *   - activeBanner (object|null) : bannière active ou null
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-content, #sim-subcategories (vidée), window._simNav (remis à null)
+ * MODIFIE : contenu de #sim-content, #sim-subcategories (vidée), window._simNav (remis à null),
+ *           rétablit l'affichage normal du simulateur (simModeFiche)
  */
 function simShowHome(newOffers, activeBanner) {
   window._simNav = null;
+  simModeFiche(false); // quitte le mode fiche offre (logo, catégories, navigation)
   simAfficherSousCategories(null, null); // accueil : barre des sous-catégories vide
   const content = document.getElementById('sim-content');
 
@@ -3388,6 +3386,7 @@ function formatLieu(city, partnerName) {
  */
 function simSelectCategory(categoryId, subcategoryId = null) {
   if (!window._simData) return;
+  simModeFiche(false); // quitte le mode fiche offre (logo, catégories, navigation)
   const { offs, activeBanner, newOffers } = window._simData;
 
   // Met à jour le style des catégories
@@ -3497,35 +3496,50 @@ function simRetour() {
 }
 
 /**
+ * FONCTION : simModeFiche
+ * DESCRIPTION : Passe le simulateur en mode « fiche offre » (plein écran comme dans l'app :
+ *               sans logo, catégories, sous-catégories ni barre de navigation) ou le rétablit
+ * PARAMÈTRES :
+ *   - actif (boolean) : true pour la fiche offre, false pour les autres écrans
+ * RETOURNE : rien
+ * MODIFIE : affichage de #sim-header, #sim-categories, #sim-subcategories, #sim-nav,
+ *           mise en page de #sim-content
+ */
+function simModeFiche(actif) {
+  ['sim-header', 'sim-categories', 'sim-subcategories', 'sim-nav'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = actif ? 'none' : (id === 'sim-subcategories' || id === 'sim-nav' ? 'flex' : 'block');
+  });
+  const content = document.getElementById('sim-content');
+  if (!content) return;
+  content.style.display = actif ? 'flex' : 'block';
+  content.style.flexDirection = actif ? 'column' : '';
+  content.style.overflowY = actif ? 'hidden' : 'auto';
+  if (!actif) content.scrollTop = 0;
+}
+
+/**
  * FONCTION : simShowOffer
- * DESCRIPTION : Affiche le détail d'une offre dans le simulateur
+ * DESCRIPTION : Affiche le détail d'une offre dans le simulateur, avec exactement le rendu
+ *               de la fiche offre de l'application (voir rendreFicheOffreMobile)
  * PARAMÈTRES :
  *   - offerId (string) : UUID de l'offre à afficher
  * RETOURNE : rien
- * MODIFIE : contenu de #sim-content
+ * MODIFIE : contenu et mise en page de #sim-content (via simModeFiche)
  */
 function simShowOffer(offerId) {
   if (!offerId || !window._simData) return;
   const offer = window._simData.offs.find(o => o.id === offerId);
   if (!offer) return;
+  const categorie = (window._simData.cats || []).find(c => c.id === offer.category_id) || null;
 
-  const content = document.getElementById('sim-content');
-  content.innerHTML = `
-    <div style="padding:10px;">
-      <div onclick="simRetour()" style="color:#003189;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px;">← Retour</div>
-      ${offer.image_url ? `<img src="${offer.image_url}" style="width:100%;border-radius:10px;margin-bottom:10px;" onerror="this.style.display='none'">` : ''}
-      ${offer.flash ? '<span style="background:#FF6B00;color:white;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;">VENTE FLASH</span><br><br>' : ''}
-      ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
-      <div style="font-size:14px;font-weight:700;color:#001F5E;margin-bottom:4px;">${offer.title}</div>
-      <div style="font-size:11px;color:#6B7280;margin-bottom:10px;">par ${offer.partner_name}</div>
-      ${offer.city ? `<div style="font-size:11px;color:#374151;margin-bottom:6px;">📍 ${offer.city}</div>` : ''}
-      <div style="height:1px;background:#F3F4F6;margin:10px 0;"></div>
-      <div style="font-size:11px;color:#4B5563;line-height:16px;margin-bottom:10px;">${offer.description || ''}</div>
-      <div style="background:#FF6B00;color:white;padding:10px;border-radius:10px;text-align:center;font-size:12px;font-weight:700;cursor:pointer;">
-        Profiter de l'offre →
-      </div>
-    </div>
-  `;
+  simModeFiche(true);
+  document.getElementById('sim-content').innerHTML = rendreFicheOffreMobile(
+    offer, categorie, offresSimilaires(offer, window._simData.offs), {
+      echelle: 351 / 400,            // écran du simulateur : 351 px pour ~400 px dans l'app
+      onRetour: 'simRetour()',
+      onSimilaire: 'simShowOffer',
+    });
 }
 
 /**
@@ -3537,6 +3551,7 @@ function simShowOffer(offerId) {
  * MODIFIE : contenu de #sim-content, style des boutons de navigation
  */
 function simNavigate(screen) {
+  simModeFiche(false); // quitte le mode fiche offre (logo, catégories, navigation)
   // Met à jour la nav bar
   ['home','search','favorites','history','profile'].forEach(s => {
     const el = document.getElementById(`sim-nav-${s}`);
@@ -3759,10 +3774,189 @@ const ok = await supabaseUpdate('banners', id, {
     }
   }
 
-  /**
+/**
+ * CONSTANTE : COULEURS_CATEGORIES
+ * DESCRIPTION : Couleur du badge catégorie de la fiche offre, par valeur de catégorie
+ *               (copie exacte de CATEGORY_COLORS de app/offer/[id].tsx)
+ */
+const COULEURS_CATEGORIES = {
+  'e-cartes-cadeaux': '#FF6B00',
+  'concerts':         '#8B5CF6',
+  'sport-spectacle':  '#10B981',
+  'mes-plaisirs':     '#EF4444',
+  'ma-maison':        '#3B82F6',
+  'mes-loisirs':      '#F59E0B',
+  'mon-bien-etre':    '#EC4899',
+  'mes-vacances':     '#06B6D4',
+  'mon-metier':       '#6B7280',
+  'mes-finances':     '#059669',
+  'ma-mobilite':      '#F97316',
+};
+
+/** URL du logo Alliance (placeholder de la fiche quand l'offre n'a pas d'image) */
+const LOGO_ALLIANCE_URL = 'https://nbgnijldoxpxzulovqlz.supabase.co/storage/v1/object/public/offers-images/logo.jpg';
+
+/**
+ * FONCTION : aUneReduction
+ * DESCRIPTION : Indique si le badge réduction doit être affiché (même règle que hasDiscount de l'app)
+ * PARAMÈTRES :
+ *   - discount (string|null) : texte de la réduction
+ * RETOURNE : boolean — true si le texte n'est pas vide
+ * MODIFIE : rien
+ */
+function aUneReduction(discount) {
+  return !!(discount || '').trim();
+}
+
+/**
+ * FONCTION : iconeFiche
+ * DESCRIPTION : Renvoie le SVG d'une icône du bandeau de la fiche offre
+ *               (équivalents des icônes Ionicons chevron-back, share-social-outline, heart-outline)
+ * PARAMÈTRES :
+ *   - nom (string) : 'retour' | 'partage' | 'favori'
+ *   - taille (number) : taille en pixels
+ * RETOURNE : string — code SVG
+ * MODIFIE : rien
+ */
+function iconeFiche(nom, taille) {
+  const t = `width="${taille}" height="${taille}" viewBox="0 0 24 24" fill="none" stroke="#003189" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
+  if (nom === 'retour') return `<svg ${t}><polyline points="15 5 8 12 15 19"/></svg>`;
+  if (nom === 'partage') return `<svg ${t}><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><line x1="8.3" y1="10.8" x2="15.7" y2="6.2"/><line x1="8.3" y1="13.2" x2="15.7" y2="17.8"/></svg>`;
+  return `<svg ${t}><path d="M12 20.5s-7.5-4.6-9.2-9.3C1.6 7.8 3.9 4.5 7.3 4.5c2 0 3.5 1.1 4.7 2.7 1.2-1.6 2.7-2.7 4.7-2.7 3.4 0 5.7 3.3 4.5 6.7-1.7 4.7-9.2 9.3-9.2 9.3z"/></svg>`;
+}
+
+/**
+ * FONCTION : rendreFicheOffreMobile
+ * DESCRIPTION : Construit le HTML de la fiche offre à l'identique de l'écran app/offer/[id].tsx :
+ *               bandeau blanc (retour, partage, favori) + liseré bleu, image 16:9 pleine largeur,
+ *               badge catégorie coloré, badge réduction, titre, « par … », pastilles ville /
+ *               jours restants, « A propos de l'offre », encadré de redirection, offres similaires
+ *               et bouton « Profiter de l'offre » fixé en bas. Le conteneur doit être en
+ *               display:flex / flex-direction:column avec une hauteur définie.
+ * PARAMÈTRES :
+ *   - offer (object) : offre à afficher (ligne de la table offers)
+ *   - categorie (object|null) : catégorie de l'offre (icon, label, value)
+ *   - similaires (array) : jusqu'à 3 offres actives de la même catégorie
+ *   - options (object) :
+ *       - echelle (number) : rapport largeur écran / 400 px de l'app (ex. 0.75)
+ *       - onRetour (string) : code JS exécuté au clic sur le bouton retour
+ *       - onSimilaire (string) : nom de la fonction appelée avec l'id d'une offre similaire
+ * RETOURNE : string — HTML de la fiche
+ * MODIFIE : rien
+ */
+function rendreFicheOffreMobile(offer, categorie, similaires, options) {
+  const k = options.echelle || 0.8;
+  const px = v => Math.round(v * k) + 'px';
+  const couleur = categorie ? (COULEURS_CATEGORIES[categorie.value] || '#003189') : '#003189';
+  const joursRestants = offer.expires_at
+    ? Math.ceil((new Date(offer.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const urgent = joursRestants !== null && joursRestants <= 7;
+  const texteJours = joursRestants === null ? '' : (joursRestants <= 0
+    ? 'Expire aujourd\'hui !'
+    : `${joursRestants} jour${joursRestants > 1 ? 's' : ''} restant${joursRestants > 1 ? 's' : ''}`);
+  const pastille = (icone, texte, rouge) => `
+    <span style="display:inline-flex;align-items:center;gap:${px(4)};background:${rouge ? '#FEF2F2' : '#F4F6FB'};padding:${px(6)} ${px(10)};border-radius:${px(8)};">
+      <span style="font-size:${px(14)};">${icone}</span>
+      <span style="font-size:${px(13)};color:${rouge ? '#EF4444' : '#374151'};font-weight:500;">${texte}</span>
+    </span>`;
+
+  const similairesHtml = (similaires || []).length === 0 ? '' : `
+    <div style="margin-bottom:${px(20)};">
+      <div style="font-size:${px(16)};font-weight:700;color:#001F5E;margin-bottom:${px(12)};">Offres similaires</div>
+      ${similaires.map(s => `
+        <div onclick="${options.onSimilaire}('${s.id}')" style="display:flex;justify-content:space-between;align-items:center;background:#F4F6FB;border-radius:${px(12)};padding:${px(12)};margin-bottom:${px(8)};cursor:pointer;">
+          <div style="display:flex;align-items:center;gap:${px(10)};flex:1;min-width:0;">
+            <div style="width:${px(44)};height:${px(44)};border-radius:${px(10)};background:${couleur}22;display:flex;align-items:center;justify-content:center;font-size:${px(20)};flex-shrink:0;">${categorie?.icon || '🏷️'}</div>
+            <div style="min-width:0;">
+              <div style="font-size:${px(13)};font-weight:600;color:#001F5E;margin-bottom:2px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${s.title}</div>
+              <div style="font-size:${px(11)};color:#9CA3AF;">${s.partner_name || ''}</div>
+            </div>
+          </div>
+          ${aUneReduction(s.discount) ? `<span style="background:${couleur};color:#FFFFFF;font-size:${px(11)};font-weight:700;padding:${px(4)} ${px(10)};border-radius:${px(8)};margin-left:${px(8)};white-space:nowrap;">${s.discount}</span>` : ''}
+        </div>`).join('')}
+    </div>`;
+
+  return `
+    <!-- Bandeau fixe blanc : retour / partage / favori -->
+    <div style="background:#FFFFFF;display:flex;justify-content:space-between;align-items:center;padding:${px(4)} ${px(12)} ${px(6)};flex-shrink:0;">
+      <span onclick="${options.onRetour}" style="width:${px(44)};height:${px(44)};display:flex;align-items:center;justify-content:center;cursor:pointer;">${iconeFiche('retour', Math.round(26 * k))}</span>
+      <span style="display:flex;gap:${px(4)};">
+        <span style="width:${px(44)};height:${px(44)};display:flex;align-items:center;justify-content:center;">${iconeFiche('partage', Math.round(24 * k))}</span>
+        <span style="width:${px(44)};height:${px(44)};display:flex;align-items:center;justify-content:center;">${iconeFiche('favori', Math.round(26 * k))}</span>
+      </span>
+    </div>
+    <div style="height:${px(8)};background:#003189;flex-shrink:0;"></div>
+
+    <!-- Zone défilante -->
+    <div style="flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;background:#FFFFFF;">
+      <div style="width:100%;aspect-ratio:16/9;position:relative;background:#FFFFFF;">
+        ${offer.image_url
+          ? `<img src="${offer.image_url}" style="width:100%;height:100%;object-fit:cover;display:block;" onerror="this.style.display='none'">`
+          : `<div style="width:100%;height:100%;background:${couleur};display:flex;align-items:center;justify-content:center;"><img src="${LOGO_ALLIANCE_URL}" style="width:${px(200)};height:${px(80)};object-fit:contain;"></div>`}
+        ${offer.flash ? `<span style="position:absolute;bottom:${px(12)};left:${px(16)};background:#FF6B00;color:#FFFFFF;font-weight:800;font-size:${px(12)};padding:${px(5)} ${px(12)};border-radius:${px(6)};">VENTE FLASH</span>` : ''}
+      </div>
+
+      <div style="padding:${px(20)};">
+        ${categorie ? `<div style="display:inline-block;background:${couleur};color:#FFFFFF;font-size:${px(12)};font-weight:600;padding:${px(4)} ${px(10)};border-radius:${px(6)};margin-bottom:${px(10)};">${categorie.icon || ''} ${categorie.label}</div><br>` : ''}
+        ${aUneReduction(offer.discount) ? `<div style="display:inline-block;background:#003189;color:#FFFFFF;font-weight:700;font-size:${px(16)};padding:${px(6)} ${px(14)};border-radius:${px(8)};margin-bottom:${px(12)};">${offer.discount}</div>` : ''}
+        <div style="font-size:${px(22)};font-weight:700;color:#001F5E;line-height:${px(28)};margin-bottom:${px(6)};">${offer.title || ''}</div>
+        <div style="font-size:${px(15)};color:#6B7280;margin-bottom:${px(16)};">par ${offer.partner_name || ''}</div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:${px(16)};margin-bottom:${px(20)};">
+          ${(offer.city || '').trim() ? pastille('📍', offer.city, false) : ''}
+          ${joursRestants !== null ? pastille('⏱️', texteJours, urgent) : ''}
+        </div>
+
+        ${offer.promo_code ? `
+          <div style="background:#F4F6FB;border:2px dashed #003189;border-radius:${px(12)};padding:${px(16)};text-align:center;margin-bottom:${px(20)};">
+            <div style="font-size:${px(12)};color:#6B7280;margin-bottom:${px(4)};">Code promo</div>
+            <div style="font-size:${px(24)};font-weight:800;color:#003189;letter-spacing:${px(4)};">${offer.promo_code}</div>
+            <div style="font-size:${px(11)};color:#9CA3AF;margin-top:${px(4)};">Appuyer pour copier</div>
+          </div>` : ''}
+
+        <div style="height:1px;background:#F3F4F6;margin:${px(20)} 0;"></div>
+
+        <div style="font-size:${px(16)};font-weight:700;color:#001F5E;margin-bottom:${px(12)};">A propos de l'offre</div>
+        <div style="font-size:${px(15)};color:#4B5563;line-height:${px(23)};margin-bottom:${px(20)};white-space:pre-line;">${offer.description || ''}</div>
+
+        <div style="background:#F4F6FB;padding:${px(14)};border-radius:${px(10)};margin-bottom:${px(24)};border-left:3px solid #003189;">
+          <div style="font-size:${px(13)};color:#6B7280;line-height:${px(18)};">
+            En cliquant sur "Profiter de l'offre", vous serez redirige vers le site partenaire ${offer.partner_name || ''} qui prendra en charge votre identification et la validation de l'achat.
+          </div>
+        </div>
+
+        ${similairesHtml}
+      </div>
+    </div>
+
+    <!-- Bouton fixe en bas -->
+    <div style="padding:${px(12)} ${px(20)};border-top:1px solid #F3F4F6;background:#FFFFFF;flex-shrink:0;">
+      <div style="background:#FF6B00;border-radius:${px(14)};padding:${px(16)} 0;text-align:center;color:#FFFFFF;font-size:${px(16)};font-weight:700;">Profiter de l'offre →</div>
+    </div>
+  `;
+}
+
+/**
+ * FONCTION : offresSimilaires
+ * DESCRIPTION : Sélectionne les offres similaires affichées en bas de la fiche (comme l'app :
+ *               3 offres actives de la même catégorie, hors offre affichée)
+ * PARAMÈTRES :
+ *   - offer (object) : offre affichée
+ *   - offres (array) : liste dans laquelle chercher
+ * RETOURNE : array — au plus 3 offres
+ * MODIFIE : rien
+ */
+function offresSimilaires(offer, offres) {
+  return (offres || [])
+    .filter(o => o.category_id === offer.category_id && o.id !== offer.id && o.active && !o.deleted_at)
+    .slice(0, 3);
+}
+
+/**
  * FONCTION : openOfferPreview
- * DESCRIPTION : Ouvre la modal d'aperçu mobile pour une offre
- *               Affiche l'offre telle qu'elle apparaît dans l'application
+ * DESCRIPTION : Ouvre la modal d'aperçu mobile pour une offre, avec exactement le rendu
+ *               de la fiche offre de l'application (voir rendreFicheOffreMobile)
  * PARAMÈTRES :
  *   - id (string) : UUID de l'offre à afficher
  * RETOURNE : rien
@@ -3771,23 +3965,13 @@ const ok = await supabaseUpdate('banners', id, {
 function openOfferPreview(id) {
   const offer = allOffers.find(o => o.id === id);
   if (!offer) return;
-
+  const categorie = allCategories.find(c => c.id === offer.category_id) || null;
   const content = document.getElementById('offer-preview-content');
-  content.innerHTML = `
-    ${offer.image_url ? `<img src="${offer.image_url}" style="width:100%;border-radius:10px;margin-bottom:10px;" onerror="this.style.display='none'">` : ''}
-    ${offer.flash ? '<span style="background:#FF6B00;color:white;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:800;">VENTE FLASH</span><br><br>' : ''}
-    ${offer.discount ? `<div style="background:#003189;color:white;padding:4px 10px;border-radius:6px;display:inline-block;font-size:13px;font-weight:700;margin-bottom:8px;">${offer.discount}</div>` : ''}
-    <div style="font-size:14px;font-weight:700;color:#001F5E;margin-bottom:4px;line-height:20px;">${offer.title}</div>
-    <div style="font-size:11px;color:#6B7280;margin-bottom:8px;">par ${offer.partner_name}</div>
-    ${offer.city ? `<div style="font-size:11px;color:#374151;margin-bottom:4px;">📍 ${offer.city}</div>` : ''}
-    ${offer.promo_code ? `<div style="background:#E8EDF8;color:#003189;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;display:inline-block;margin:6px 0;">🎟️ Code : ${offer.promo_code}</div>` : ''}
-    <div style="height:1px;background:#E5E7EB;margin:10px 0;"></div>
-    <div style="font-size:11px;color:#4B5563;line-height:16px;margin-bottom:12px;">${offer.description || ''}</div>
-    <div style="background:#FF6B00;color:white;padding:10px;border-radius:10px;text-align:center;font-size:12px;font-weight:700;">
-      Profiter de l'offre →
-    </div>
-  `;
-
+  content.innerHTML = rendreFicheOffreMobile(offer, categorie, offresSimilaires(offer, allOffers), {
+    echelle: 300 / 400,              // écran de la modal : 300 px pour ~400 px dans l'app
+    onRetour: 'closeOfferPreview()',
+    onSimilaire: 'openOfferPreview',
+  });
   document.getElementById('offer-preview-modal').classList.add('open');
 }
 
