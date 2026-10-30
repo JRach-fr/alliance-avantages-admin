@@ -92,7 +92,7 @@
     main { padding: 24px; max-width: 1200px; margin: 0 auto; }
 
     /* STATS */
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px; }
     .stat-card { background: white; border-radius: 12px; padding: 20px; border-bottom: 3px solid #003189; box-shadow: 0 2px 8px rgba(0,49,137,0.08); }
     .stat-card .number { font-size: 32px; font-weight: 700; color: #003189; }
     .stat-card .label { font-size: 13px; color: #6B7280; margin-top: 4px; }
@@ -198,10 +198,10 @@
     <button onclick="showSection('offers', this)">🏷️ Offres</button>
     <button onclick="showSection('add-offer', this)">➕ Ajouter une offre</button>
     <button onclick="showSection('categories', this)">📂 Catégories</button>
-    <button onclick="showSection('trash', this)">🗑️ Poubelle</button>
     <button onclick="showSection('users', this)">👥 Utilisateurs</button>
     <button onclick="showSection('settings', this)">⚙️ Paramètres</button>
     <button onclick="showSection('logs', this)">📋 Journal</button>
+    <button onclick="showSection('trash', this)">🗑️ Poubelle</button>
   </nav>
 
   <main>
@@ -215,18 +215,29 @@
           <div class="label">Offres totales</div>
         </div>
         <div class="stat-card orange">
-          <div class="number" id="stat-flash">-</div>
-          <div class="label">Offres flash</div>
+          <div class="number" id="stat-categories">-</div>
+          <div class="label">Catégories</div>
         </div>
         <div class="stat-card">
           <div class="number" id="stat-active">-</div>
           <div class="label">Offres actives</div>
         </div>
         <div class="stat-card orange">
-          <div class="number" id="stat-categories">-</div>
-          <div class="label">Catégories</div>
+          <div class="number" id="stat-flash">-</div>
+          <div class="label">Offres flash</div>
+        </div>
+        <div class="stat-card" style="cursor:pointer;" onclick="ouvrirUtilisateurs()" title="Voir les utilisateurs">
+          <div class="number" id="stat-users-actifs">-</div>
+          <div class="label">Utilisateurs activés</div>
+        </div>
+        <div class="stat-card orange" style="cursor:pointer;" onclick="ouvrirUtilisateurs()" title="Voir les utilisateurs">
+          <div class="number" id="stat-users-attente">-</div>
+          <div class="label">En attente d'activation</div>
         </div>
       </div>
+
+      <!-- Comptes en attente d'activation (nom, email, date de création) -->
+      <div id="dashboard-attente" style="display:none;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:14px 18px;margin-bottom:24px;font-size:14px;"></div>
 
       <div class="table-wrapper">
         <table>
@@ -1863,9 +1874,11 @@ function togglePassword() {
  * DESCRIPTION : Affiche les statistiques et le tableau récapitulatif des offres
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : contenu de #stat-total, #stat-flash, #stat-active, #stat-categories, #dashboard-table
+ * MODIFIE : contenu de #stat-total, #stat-flash, #stat-active, #stat-categories, #dashboard-table,
+ *           compteurs utilisateurs (via loadDashboardUtilisateurs)
  */
   function loadDashboard() {
+    loadDashboardUtilisateurs();
     document.getElementById('stat-total').textContent = allOffers.length;
     document.getElementById('stat-flash').textContent = allOffers.filter(o => o.flash).length;
     document.getElementById('stat-active').textContent = allOffers.filter(o => o.active).length;
@@ -1884,6 +1897,41 @@ function togglePassword() {
         <td>${o.flash ? '⚡ Flash' : '-'}</td>
       </tr>`;
     }).join('');
+  }
+
+  /**
+ * FONCTION : loadDashboardUtilisateurs
+ * DESCRIPTION : Compte les utilisateurs activés et ceux en attente d'activation (compte désactivé),
+ *               et liste ces derniers (nom, email, date de création) sur le tableau de bord
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : #stat-users-actifs, #stat-users-attente, #dashboard-attente
+ */
+  async function loadDashboardUtilisateurs() {
+    const data = await supabaseQuery('profils', { select: 'id,prenom,nom,email,actif,created_at', order: 'created_at.asc' });
+    const profils = Array.isArray(data) ? data : [];
+    const enAttente = profils.filter(u => !u.actif);
+    document.getElementById('stat-users-actifs').textContent = profils.length - enAttente.length;
+    document.getElementById('stat-users-attente').textContent = enAttente.length;
+    const bloc = document.getElementById('dashboard-attente');
+    if (enAttente.length === 0) { bloc.style.display = 'none'; return; }
+    bloc.innerHTML = `<div style="font-weight:700;color:#C2410C;margin-bottom:6px;">⏳ En attente d'activation</div>` +
+      enAttente.map(u => `<div>• <strong>${echapperHtml([u.prenom, u.nom].filter(Boolean).join(' ') || '(non renseigné)')}</strong>
+        — ${echapperHtml(u.email)} <span style="color:#9CA3AF;">(créé le ${formaterDateHeure(u.created_at)})</span></div>`).join('') +
+      `<div style="margin-top:8px;"><a href="#" onclick="ouvrirUtilisateurs();return false;" style="color:#003189;font-weight:600;">→ Gérer dans Utilisateurs</a></div>`;
+    bloc.style.display = 'block';
+  }
+
+  /**
+ * FONCTION : ouvrirUtilisateurs
+ * DESCRIPTION : Ouvre la section Utilisateurs depuis le tableau de bord (et marque l'onglet comme actif)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : section affichée, onglet actif
+ */
+  function ouvrirUtilisateurs() {
+    const bouton = [...document.querySelectorAll('nav button')].find(b => b.textContent.includes('Utilisateurs'));
+    showSection('users', bouton);
   }
 
   // ============================================================
