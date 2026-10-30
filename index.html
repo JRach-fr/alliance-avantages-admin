@@ -199,6 +199,7 @@
     <button onclick="showSection('add-offer', this)">➕ Ajouter une offre</button>
     <button onclick="showSection('categories', this)">📂 Catégories</button>
     <button onclick="showSection('trash', this)">🗑️ Poubelle</button>
+    <button onclick="showSection('users', this)">👥 Utilisateurs</button>
     <button onclick="showSection('settings', this)">⚙️ Paramètres</button>
     <button onclick="showSection('logs', this)">📋 Journal</button>
   </nav>
@@ -540,6 +541,69 @@
     </table>
   </div>
 </div>
+<!-- UTILISATEURS -->
+<!--
+  COMPOSANT  : Section Utilisateurs
+  DESCRIPTION : Création et gestion des comptes de l'application (testeurs puis utilisateurs).
+                Les actions sensibles passent par la fonction serveur « gestion-utilisateurs »
+                (clé secrète côté serveur uniquement, jamais dans cette page).
+-->
+<div id="section-users" class="section">
+  <div class="section-header">
+    <h2>👥 Utilisateurs</h2>
+    <span id="users-count" style="color:#6B7280;font-size:14px;"></span>
+  </div>
+
+  <div class="form-card">
+    <h3>Créer un compte</h3>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Prénom *</label>
+        <input type="text" id="user-prenom" maxlength="80" placeholder="Ex : Rachid">
+      </div>
+      <div class="form-group">
+        <label>Nom *</label>
+        <input type="text" id="user-nom" maxlength="80" placeholder="Ex : JERMOUNI">
+      </div>
+      <div class="form-group">
+        <label>Email *</label>
+        <input type="email" id="user-email" maxlength="120" placeholder="prenom.nom@exemple.fr">
+      </div>
+      <div class="form-group">
+        <label>Ville</label>
+        <input type="text" id="user-ville" maxlength="80" placeholder="Ex : Nice (offres à proximité)">
+      </div>
+    </div>
+    <p style="font-size:12px;color:#6B7280;margin:12px 0;">
+      🔒 Données personnelles : seuls le nom, le prénom, l'email et la ville sont collectés, uniquement pour
+      l'accès à l'application et l'affichage des offres proches. Elles ne sont visibles que par l'administrateur
+      et par l'utilisateur lui-même.
+    </p>
+    <button class="btn-primary" id="user-create-btn" onclick="creerUtilisateur()">➕ Créer le compte</button>
+    <div id="user-result" style="display:none;margin-top:14px;padding:14px;border-radius:10px;background:#ECFDF5;border:1px solid #6EE7B7;font-size:14px;"></div>
+  </div>
+
+  <div class="table-wrapper">
+    <table>
+      <thead>
+        <tr>
+          <th>Nom</th>
+          <th>Email</th>
+          <th>Ville</th>
+          <th>Statut</th>
+          <th>Connexions</th>
+          <th>Dernière connexion</th>
+          <th>Créé le</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="users-table">
+        <tr><td colspan="8" class="loading">Chargement...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
     <!-- PARAMÈTRES -->
 <div id="section-settings" class="section">
   <div class="section-header">
@@ -1411,7 +1475,7 @@ function togglePassword() {
  *               Recharge les données de la section si nécessaire
  *               Masque le message d'alerte au changement de section
  * PARAMÈTRES :
- *   - name (string) : nom de la section (dashboard, offers, add-offer, categories, trash, settings, logs)
+ *   - name (string) : nom de la section (dashboard, offers, add-offer, categories, trash, users, settings, logs)
  *   - btn (HTMLElement) : le bouton cliqué, passé via this dans le HTML — permet de le marquer comme actif
  * RETOURNE : rien
  * MODIFIE : classes CSS des sections et boutons nav, masque #alert, charge les données si nécessaire
@@ -1431,9 +1495,203 @@ function togglePassword() {
     if (name === 'categories') loadCategories();
     if (name === 'add-offer') loadCategoriesForForm();
     if (name === 'trash') loadTrash();
+    if (name === 'users') loadUsers();
     if (name === 'logs') loadLogs();
     if (name === 'settings') loadSettings();
     if (name === 'simulator') loadSimulator();
+  }
+
+  // ============================================================
+  // UTILISATEURS
+  // ============================================================
+  /** Liste des profils chargés (table profils) */
+  let allUsers = [];
+
+  /**
+ * FONCTION : echapperHtml
+ * DESCRIPTION : Échappe un texte saisi par un utilisateur avant de l'insérer dans la page
+ *               (évite qu'un nom contenant du HTML soit interprété)
+ * PARAMÈTRES :
+ *   - texte (string|null) : texte à afficher
+ * RETOURNE : string — texte sans risque
+ * MODIFIE : rien
+ */
+  function echapperHtml(texte) {
+    return String(texte ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  /**
+ * FONCTION : formaterDateHeure
+ * DESCRIPTION : Affiche une date ISO au format français (jj/mm/aaaa hh:mm)
+ * PARAMÈTRES :
+ *   - iso (string|null) : date au format ISO
+ * RETOURNE : string — date lisible, ou « — » si absente
+ * MODIFIE : rien
+ */
+  function formaterDateHeure(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  /**
+ * FONCTION : appelGestionUtilisateurs
+ * DESCRIPTION : Appelle la fonction serveur « gestion-utilisateurs » avec le jeton de l'admin connecté
+ * PARAMÈTRES :
+ *   - corps (object) : { action, ... } (voir la fonction serveur)
+ * RETOURNE : Promise<object> — réponse JSON ({ ok, ... } ou { erreur })
+ * MODIFIE : comptes Supabase Auth selon l'action
+ */
+  async function appelGestionUtilisateurs(corps) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/gestion-utilisateurs`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok && !data.erreur) data.erreur = `Erreur ${res.status}`;
+      return data;
+    } catch (e) {
+      return { erreur: 'Serveur injoignable' };
+    }
+  }
+
+  /**
+ * FONCTION : loadUsers
+ * DESCRIPTION : Charge et affiche la liste des utilisateurs (table profils)
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : allUsers, contenu de #users-table et #users-count
+ */
+  async function loadUsers() {
+    const data = await supabaseQuery('profils', { select: '*', order: 'created_at.desc' });
+    allUsers = Array.isArray(data) ? data : [];
+    const tbody = document.getElementById('users-table');
+    const actifs = allUsers.filter(u => u.actif).length;
+    document.getElementById('users-count').textContent = `${allUsers.length} compte(s) · ${actifs} actif(s)`;
+    if (allUsers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun utilisateur</td></tr>';
+      return;
+    }
+    const moi = sessionAdmin?.email;
+    tbody.innerHTML = allUsers.map(u => {
+      const nomComplet = [u.prenom, u.nom].filter(Boolean).join(' ');
+      const estMoi = u.email === moi;
+      return `<tr${u.actif ? '' : ' style="opacity:0.55;"'}>
+        <td><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}</td>
+        <td>${echapperHtml(u.email)}</td>
+        <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
+        <td>${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}</td>
+        <td style="text-align:center;">${u.nb_connexions || 0}</td>
+        <td>${formaterDateHeure(u.derniere_connexion)}</td>
+        <td>${formaterDateHeure(u.created_at)}</td>
+        <td style="white-space:nowrap;">
+          ${estMoi ? '' : `
+            <button class="btn-edit" onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')" title="Nouveau mot de passe provisoire">🔑</button>
+            ${u.actif
+              ? `<button class="btn-orange" style="padding:6px 10px;font-size:12px;" onclick="actionUtilisateur('${u.id}', 'desactiver')" title="Bloquer la connexion">⏸️ Désactiver</button>`
+              : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
+            <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement">🗑️</button>`}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+
+  /**
+ * FONCTION : afficherIdentifiants
+ * DESCRIPTION : Affiche l'email et le mot de passe provisoire à transmettre à l'utilisateur,
+ *               avec un bouton pour tout copier (le mot de passe n'est stocké nulle part)
+ * PARAMÈTRES :
+ *   - titre (string) : texte d'introduction
+ *   - email (string) : email du compte
+ *   - motDePasse (string) : mot de passe provisoire
+ * RETOURNE : rien
+ * MODIFIE : contenu et affichage de #user-result
+ */
+  function afficherIdentifiants(titre, email, motDePasse) {
+    const box = document.getElementById('user-result');
+    const texte = `Alliance Avantages — vos identifiants\nEmail : ${email}\nMot de passe provisoire : ${motDePasse}`;
+    box.innerHTML = `
+      <div style="font-weight:700;color:#065F46;margin-bottom:8px;">${echapperHtml(titre)}</div>
+      <div>Email : <strong>${echapperHtml(email)}</strong></div>
+      <div>Mot de passe provisoire : <strong style="font-family:monospace;font-size:16px;letter-spacing:1px;">${echapperHtml(motDePasse)}</strong></div>
+      <div style="font-size:12px;color:#6B7280;margin-top:8px;">⚠️ Notez-le maintenant : il n'est conservé nulle part et ne sera plus affiché.</div>
+      <button class="btn-primary" style="margin-top:10px;padding:8px 14px;font-size:13px;" id="user-copy-btn">📋 Copier les identifiants</button>`;
+    box.style.display = 'block';
+    document.getElementById('user-copy-btn').onclick = async () => {
+      try { await navigator.clipboard.writeText(texte); document.getElementById('user-copy-btn').textContent = '✅ Copié'; } catch (e) {}
+    };
+    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /**
+ * FONCTION : creerUtilisateur
+ * DESCRIPTION : Crée un compte utilisateur à partir du formulaire (via la fonction serveur)
+ *               et affiche le mot de passe provisoire à transmettre
+ * PARAMÈTRES : aucun (lit #user-prenom, #user-nom, #user-email, #user-ville)
+ * RETOURNE : Promise<void>
+ * MODIFIE : comptes Supabase Auth et profils, formulaire, liste, journal
+ */
+  async function creerUtilisateur() {
+    const prenom = document.getElementById('user-prenom').value.trim();
+    const nom = document.getElementById('user-nom').value.trim();
+    const email = document.getElementById('user-email').value.trim();
+    const ville = document.getElementById('user-ville').value.trim();
+    if (!prenom || !nom || !email) {
+      showAlert('❌ Prénom, nom et email sont obligatoires', 'error', 4000);
+      return;
+    }
+    const bouton = document.getElementById('user-create-btn');
+    bouton.disabled = true; bouton.textContent = '⏳ Création...';
+    const res = await appelGestionUtilisateurs({ action: 'creer', prenom, nom, email, ville });
+    bouton.disabled = false; bouton.textContent = '➕ Créer le compte';
+    if (res.erreur) {
+      showAlert('❌ ' + res.erreur, 'error', 6000);
+      return;
+    }
+    ['user-prenom', 'user-nom', 'user-email', 'user-ville'].forEach(id => document.getElementById(id).value = '');
+    afficherIdentifiants(`✅ Compte créé pour ${prenom} ${nom.toUpperCase()}`, res.email, res.motDePasse);
+    addLog('👤 Utilisateur créé', `${prenom} ${nom.toUpperCase()} (${res.email})${ville ? ' — ' + ville : ''}`);
+    loadUsers();
+  }
+
+  /**
+ * FONCTION : actionUtilisateur
+ * DESCRIPTION : Désactive, active, réinitialise le mot de passe ou supprime un compte
+ *               (avec confirmation), via la fonction serveur
+ * PARAMÈTRES :
+ *   - id (string) : identifiant du compte
+ *   - action (string) : 'desactiver' | 'activer' | 'reinitialiser_mdp' | 'supprimer'
+ * RETOURNE : Promise<void>
+ * MODIFIE : compte Supabase Auth, profil, liste, journal
+ */
+  async function actionUtilisateur(id, action) {
+    const u = allUsers.find(x => x.id === id);
+    if (!u) return;
+    const qui = [u.prenom, u.nom].filter(Boolean).join(' ') || u.email;
+    const questions = {
+      desactiver: `Désactiver le compte de ${qui} ? Il ne pourra plus se connecter.`,
+      activer: `Réactiver le compte de ${qui} ?`,
+      reinitialiser_mdp: `Créer un nouveau mot de passe provisoire pour ${qui} ? L'ancien ne fonctionnera plus.`,
+      supprimer: `Supprimer DÉFINITIVEMENT le compte de ${qui} ? Son profil et son historique de connexions seront effacés.`,
+    };
+    if (!confirm(questions[action])) return;
+    const res = await appelGestionUtilisateurs({ action, id });
+    if (res.erreur) {
+      showAlert('❌ ' + res.erreur, 'error', 6000);
+      return;
+    }
+    const journal = {
+      desactiver: ['⏸️ Utilisateur désactivé', qui],
+      activer: ['▶️ Utilisateur réactivé', qui],
+      reinitialiser_mdp: ['🔑 Mot de passe réinitialisé', qui],
+      supprimer: ['🗑️ Utilisateur supprimé', `${qui} (${u.email})`],
+    };
+    addLog(journal[action][0], journal[action][1]);
+    if (action === 'reinitialiser_mdp') afficherIdentifiants(`🔑 Nouveau mot de passe pour ${qui}`, u.email, res.motDePasse);
+    else showAlert('✅ ' + journal[action][0], 'success', 3000);
+    loadUsers();
   }
 
   // ============================================================
