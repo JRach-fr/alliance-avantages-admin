@@ -37,13 +37,16 @@
   
   VARIABLES À MODIFIER SI NÉCESSAIRE :
   - SUPABASE_URL    : URL du projet Supabase
-  - SUPABASE_KEY    : Clé publique Supabase
-  - ADMIN_PASSWORD  : Mot de passe de l'interface admin
+  - SUPABASE_KEY    : Clé publique Supabase (anon)
+
+  CONNEXION (depuis le 30/10/2026) :
+  - Connexion par Supabase Auth (email + mot de passe), plus aucun mot de passe dans ce fichier
+  - Seuls les comptes dont app_metadata.role = 'admin' peuvent entrer
+  - Les requêtes partent avec le jeton de session (jetonSession()), ce qui permet le RLS
   
   ATTENTIONS PARTICULIÈRES :
-  - Ne jamais partager ce fichier avec le mot de passe en clair !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  - Changer ADMIN_PASSWORD régulièrement
-  - La clé SUPABASE_KEY est publique mais protégée par RLS
+  - La clé SUPABASE_KEY est publique : la protection des données repose sur le RLS
+  - Les comptes se créent dans Supabase › Authentication › Users (inscriptions publiques fermées)
   
   ÉVÈNEMENTS SPÉCIAUX (bloc à modifier pour personnaliser) :
   - Pour afficher un message spécial (Noël, tombola, jeux 
@@ -164,12 +167,13 @@
   <div class="login-box">
     <h1>🔐 Alliance Avantages</h1>
     <p>Interface d'administration</p>
+    <input type="email" id="login-email" placeholder="Email" autocomplete="username" onkeypress="if(event.key==='Enter') login()" style="width:100%;margin-bottom:10px;">
     <div style="position:relative;">
-      <input type="password" id="login-password" placeholder="Mot de passe" onkeypress="if(event.key==='Enter') login()" style="width:100%;padding-right:40px;">
+      <input type="password" id="login-password" placeholder="Mot de passe" autocomplete="current-password" onkeypress="if(event.key==='Enter') login()" style="width:100%;padding-right:40px;">
       <span onclick="togglePassword()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;" id="eye-icon">👁️</span>
     </div>
     <button onclick="login()">Se connecter</button>
-    <p class="login-error" id="login-error">Mot de passe incorrect</p>
+    <p class="login-error" id="login-error">Email ou mot de passe incorrect</p>
   </div>
 </div>
 
@@ -1068,31 +1072,200 @@
   // ============================================================
   const SUPABASE_URL = 'https://nbgnijldoxpxzulovqlz.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5iZ25pamxkb3hweHp1bG92cWx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMDAzNTgsImV4cCI6MjA5NDg3NjM1OH0.6eOEgzvoFeK2fGp3TBze0cLbLPrpVGlSL1VbbMa7QgY';
-  const ADMIN_PASSWORD = 'AllianceAdmin2026!';
 
   // ============================================================
-  // AUTH
+  // AUTH — Supabase Auth (email + mot de passe), réservé aux comptes admin
   // ============================================================
+  /** Clé de stockage de la session admin dans le navigateur */
+  const CLE_SESSION = 'aa_admin_session';
+  /** Session courante : { access_token, refresh_token, expires_at (secondes), email } ou null */
+  let sessionAdmin = null;
+  /** Minuteur de rafraîchissement du jeton */
+  let minuteurSession = null;
+
   /**
- * FONCTION : login
- * DESCRIPTION : Vérifie le mot de passe saisi et affiche l'interface admin
- * PARAMÈTRES : aucun (lit le champ #login-password)
- * RETOURNE : rien
- * MODIFIE : affichage de #login-screen et #app, lance loadAll()
+ * FONCTION : jetonSession
+ * DESCRIPTION : Jeton à envoyer dans l'en-tête Authorization des requêtes Supabase :
+ *               le jeton de la session admin si connecté, sinon la clé publique
+ * PARAMÈTRES : aucun
+ * RETOURNE : string — jeton JWT
+ * MODIFIE : rien
  */
-  function login() {
-  const pwd = document.getElementById('login-password').value;
-  const savedPassword = localStorage.getItem('admin_password') || ADMIN_PASSWORD;
-  if (pwd === savedPassword) {
+  function jetonSession() {
+    return sessionAdmin?.access_token || SUPABASE_KEY;
+  }
+
+  /**
+ * FONCTION : lireRoleJeton
+ * DESCRIPTION : Lit le rôle applicatif (app_metadata.role) contenu dans un jeton JWT Supabase
+ * PARAMÈTRES :
+ *   - jeton (string) : access_token renvoyé par Supabase Auth
+ * RETOURNE : string|null — 'admin' pour un administrateur, null sinon
+ * MODIFIE : rien
+ */
+  function lireRoleJeton(jeton) {
+    try {
+      const charge = JSON.parse(atob(jeton.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+      return charge?.app_metadata?.role || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+ * FONCTION : enregistrerSession
+ * DESCRIPTION : Mémorise la session renvoyée par Supabase Auth (en mémoire et dans le navigateur)
+ *               et programme son rafraîchissement automatique 2 minutes avant expiration
+ * PARAMÈTRES :
+ *   - data (object) : réponse de /auth/v1/token (access_token, refresh_token, expires_in, user)
+ * RETOURNE : rien
+ * MODIFIE : sessionAdmin, localStorage[CLE_SESSION], minuteurSession
+ */
+  function enregistrerSession(data) {
+    sessionAdmin = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Math.floor(Date.now() / 1000) + (data.expires_in || 3600),
+      email: data.user?.email || sessionAdmin?.email || '',
+    };
+    try { localStorage.setItem(CLE_SESSION, JSON.stringify(sessionAdmin)); } catch (e) {}
+    clearTimeout(minuteurSession);
+    const delai = Math.max(30, (sessionAdmin.expires_at - Math.floor(Date.now() / 1000)) - 120);
+    minuteurSession = setTimeout(rafraichirSession, delai * 1000);
+  }
+
+  /**
+ * FONCTION : effacerSession
+ * DESCRIPTION : Oublie la session admin (mémoire, navigateur, minuteur)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : sessionAdmin, localStorage[CLE_SESSION], minuteurSession
+ */
+  function effacerSession() {
+    sessionAdmin = null;
+    clearTimeout(minuteurSession);
+    try { localStorage.removeItem(CLE_SESSION); } catch (e) {}
+  }
+
+  /**
+ * FONCTION : appelAuth
+ * DESCRIPTION : Appelle l'API Supabase Auth pour obtenir un jeton
+ * PARAMÈTRES :
+ *   - grantType (string) : 'password' (connexion) ou 'refresh_token' (renouvellement)
+ *   - corps (object) : { email, password } ou { refresh_token }
+ * RETOURNE : Promise<object|null> — réponse de Supabase si succès, null sinon
+ * MODIFIE : rien
+ */
+  async function appelAuth(grantType, corps) {
+    try {
+      const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=${grantType}`, {
+        method: 'POST',
+        headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+ * FONCTION : rafraichirSession
+ * DESCRIPTION : Renouvelle le jeton de la session admin avec le refresh_token ;
+ *               renvoie à l'écran de connexion si la session n'est plus valable
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<boolean> — true si la session est valable
+ * MODIFIE : sessionAdmin (via enregistrerSession / effacerSession), affichage si échec
+ */
+  async function rafraichirSession() {
+    if (!sessionAdmin?.refresh_token) return false;
+    const data = await appelAuth('refresh_token', { refresh_token: sessionAdmin.refresh_token });
+    if (data?.access_token && lireRoleJeton(data.access_token) === 'admin') {
+      enregistrerSession(data);
+      return true;
+    }
+    effacerSession();
+    afficherEcranConnexion();
+    return false;
+  }
+
+  /**
+ * FONCTION : afficherAdmin
+ * DESCRIPTION : Masque l'écran de connexion, affiche l'interface et charge les données
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : affichage de #login-screen et #app, lance loadAll() et loadSettings()
+ */
+  function afficherAdmin() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     loadAll();
-    addLog('🔐 Connexion', 'Connexion admin réussie');
     loadSettings();
-  } else {
-    document.getElementById('login-error').style.display = 'block';
   }
-}
+
+  /**
+ * FONCTION : afficherEcranConnexion
+ * DESCRIPTION : Revient à l'écran de connexion et vide le mot de passe
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : affichage de #login-screen et #app, champ #login-password
+ */
+  function afficherEcranConnexion() {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-password').value = '';
+  }
+
+  /**
+ * FONCTION : login
+ * DESCRIPTION : Connecte l'administrateur via Supabase Auth (email + mot de passe).
+ *               Refuse les comptes qui n'ont pas le rôle 'admin' (ex. comptes testeurs).
+ * PARAMÈTRES : aucun (lit #login-email et #login-password)
+ * RETOURNE : Promise<void>
+ * MODIFIE : session admin, affichage, message #login-error, journal (connexion réussie)
+ */
+  async function login() {
+    const email = document.getElementById('login-email').value.trim();
+    const pwd = document.getElementById('login-password').value;
+    const erreur = document.getElementById('login-error');
+    erreur.style.display = 'none';
+    if (!email || !pwd) {
+      erreur.textContent = 'Saisissez votre email et votre mot de passe';
+      erreur.style.display = 'block';
+      return;
+    }
+    const data = await appelAuth('password', { email, password: pwd });
+    if (!data?.access_token) {
+      erreur.textContent = 'Email ou mot de passe incorrect';
+      erreur.style.display = 'block';
+      return;
+    }
+    if (lireRoleJeton(data.access_token) !== 'admin') {
+      erreur.textContent = 'Ce compte n\'a pas accès à l\'administration';
+      erreur.style.display = 'block';
+      return;
+    }
+    enregistrerSession(data);
+    afficherAdmin();
+    addLog('🔐 Connexion', `Connexion admin réussie (${sessionAdmin.email})`);
+  }
+
+  /**
+ * FONCTION : restaurerSession
+ * DESCRIPTION : Au chargement de la page, reprend la session admin mémorisée dans le navigateur
+ *               (après renouvellement du jeton) pour éviter de se reconnecter à chaque visite
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : sessionAdmin, affichage de l'interface si la session est valable
+ */
+  async function restaurerSession() {
+    try { sessionAdmin = JSON.parse(localStorage.getItem(CLE_SESSION) || 'null'); } catch (e) { sessionAdmin = null; }
+    if (sessionAdmin?.refresh_token && await rafraichirSession()) afficherAdmin();
+    else sessionAdmin = null;
+  }
+  // Lancé après le chargement complet du script (toutes les fonctions sont alors définies)
+  window.addEventListener('DOMContentLoaded', restaurerSession);
 
   /**
  * FONCTION : togglePassword
@@ -1115,16 +1288,21 @@ function togglePassword() {
   
   /**
  * FONCTION : logout
- * DESCRIPTION : Déconnecte l'utilisateur et revient à l'écran de login
+ * DESCRIPTION : Déconnecte l'administrateur (Supabase Auth) et revient à l'écran de login
  * PARAMÈTRES : aucun
- * RETOURNE : rien
- * MODIFIE : affichage de #login-screen et #app, vide le champ mot de passe
+ * RETOURNE : Promise<void>
+ * MODIFIE : journal, session admin (effacée), affichage de #login-screen et #app
  */
-  function logout() {
-  addLog('🚪 Déconnexion', 'Déconnexion admin');
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('login-password').value = '';
+  async function logout() {
+  await addLog('🚪 Déconnexion', `Déconnexion admin (${sessionAdmin?.email || ''})`);
+  try {
+    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}` },
+    });
+  } catch (e) {}
+  effacerSession();
+  afficherEcranConnexion();
   }
 
   // ============================================================
@@ -1148,7 +1326,7 @@ function togglePassword() {
     const res = await fetch(url, {
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': 'application/json',
       }
     });
@@ -1171,7 +1349,7 @@ function togglePassword() {
       method: 'PATCH',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal'
       },
@@ -1194,7 +1372,7 @@ function togglePassword() {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal'
       },
@@ -1217,7 +1395,7 @@ function togglePassword() {
       method: 'DELETE',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
       }
     });
     return res.ok;
@@ -1841,7 +2019,7 @@ function decrireModifications(avant, apres) {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': file.type,
         'Cache-Control': '3600',
       },
@@ -2102,7 +2280,7 @@ console.log('Sont différentes:', oldOffer?.image_url !== newImageUrl);
     method: 'DELETE',
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${jetonSession()}`,
     }
   });
   console.log('Statut suppression:', delRes.status, delRes.ok);
@@ -2317,7 +2495,7 @@ const ok = await supabaseUpdate('categories', id, { label, icon, position, activ
     const res = await fetch(`${SUPABASE_URL}/rest/v1/categories?select=*&order=position.asc`, {
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
       }
     });
     allCategories = await res.json();
@@ -2548,7 +2726,7 @@ async function loadTrash() {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/offers?deleted_at=not.is.null&select=*&order=deleted_at.desc`, {
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${jetonSession()}`,
     }
   });
   const trashedOffers = await response.json();
@@ -2640,7 +2818,7 @@ async function emptyTrash() {
     method: 'DELETE',
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${jetonSession()}`,
     }
   });
   if (response.ok) {
@@ -2673,12 +2851,12 @@ function showPasswordMessage(text, type) {
 
 /**
  * FONCTION : changePassword
- * DESCRIPTION : Change le mot de passe admin et le sauvegarde en localStorage
+ * DESCRIPTION : Change le mot de passe du compte admin connecté (Supabase Auth)
  * PARAMÈTRES : aucun (lit #new-password et #confirm-password)
- * RETOURNE : rien
- * MODIFIE : ADMIN_PASSWORD en mémoire et dans localStorage, message #password-message
+ * RETOURNE : Promise<void>
+ * MODIFIE : mot de passe du compte dans Supabase Auth, message #password-message, journal
  */
-function changePassword() {
+async function changePassword() {
   const newPwd = document.getElementById('new-password').value;
   const confirmPwd = document.getElementById('confirm-password').value;
 
@@ -2693,7 +2871,16 @@ function changePassword() {
     return;
   }
 
-  localStorage.setItem('admin_password', newPwd);
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    method: 'PUT',
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: newPwd }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    showPasswordMessage('❌ Échec : ' + (err.msg || err.message || 'mot de passe refusé par Supabase'), 'error');
+    return;
+  }
   document.getElementById('new-password').value = '';
   document.getElementById('confirm-password').value = '';
   showPasswordMessage('✅ Mot de passe changé avec succès !', 'success');
@@ -2764,7 +2951,7 @@ async function uploadBannerImage(input) {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': file.type,
         'Cache-Control': '3600',
       },
@@ -2972,7 +3159,7 @@ async function deleteBanner(id, name, imageUrl) {
     method: 'DELETE',
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${jetonSession()}`,
     }
   });
 
@@ -3072,8 +3259,8 @@ function loadSettings() {
   const email = localStorage.getItem('contact_email');
   if (email) document.getElementById('settings-email').value = email;
   
-  const savedPassword = localStorage.getItem('admin_password');
-  if (savedPassword) window._ADMIN_PASSWORD = savedPassword;
+  // Ancien mot de passe local (avant Supabase Auth) : supprimé du navigateur
+  try { localStorage.removeItem('admin_password'); } catch (e) {}
 
   // Remplit le select des offres pour la bannière
   const bannerSelect = document.getElementById('banner-offer-id');
@@ -3165,7 +3352,7 @@ async function clearLogs() {
     method: 'DELETE',
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${jetonSession()}`,
     }
   });
 
@@ -3614,7 +3801,7 @@ async function uploadEditBannerImage(input) {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': file.type,
         'Cache-Control': '3600',
       },
@@ -3726,7 +3913,7 @@ if (oldBanner && oldBanner.image_url && imageUrl && oldBanner.image_url !== imag
     method: 'DELETE',
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${jetonSession()}`,
     }
   });
   addLog('🖼️ Image bannière modifiée', `"${name}" — ancienne image supprimée, nouvelle image enregistrée`);}
@@ -4015,7 +4202,7 @@ async function uploadEditOfferImage(input) {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Authorization': `Bearer ${jetonSession()}`,
         'Content-Type': file.type,
         'Cache-Control': '3600',
       },
