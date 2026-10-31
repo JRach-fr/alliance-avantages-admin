@@ -1641,7 +1641,10 @@ function togglePassword() {
         <td>${echapperHtml(u.email)}</td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
-        <td>${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}</td>
+        <td>${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}
+          <div style="font-size:11px;margin-top:4px;white-space:nowrap;" title="Information « Données personnelles » acceptée dans l'application">${u.information_lue_le
+            ? `<span style="color:#16A34A;">🛡️ Info lue le ${formaterDateHeure(u.information_lue_le).split(' ')[0]}</span>`
+            : '<span style="color:#C2410C;">🛡️ Info non lue</span>'}</div></td>
         <td style="text-align:center;">${u.nb_connexions || 0}</td>
         <td>${formaterDateHeure(u.derniere_connexion)}</td>
         <td>${formaterDateHeure(u.created_at)}</td>
