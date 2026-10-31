@@ -98,6 +98,17 @@
     .stat-card .label { font-size: 13px; color: #6B7280; margin-top: 4px; }
     .stat-card.orange { border-bottom-color: #FF6B00; }
     .stat-card.orange .number { color: #FF6B00; }
+    /* Carte « à traiter » : fond orange pâle, bordure rouge qui pulse, pastille ⚠️ */
+    .stat-card.alerte { position: relative; background: #FFF7ED; border: 2px solid #DC2626; border-bottom-width: 3px; animation: pulse-alerte 1.6s ease-in-out infinite; }
+    .stat-card.alerte .number { color: #DC2626; }
+    .stat-card.alerte .label { color: #991B1B; font-weight: 600; }
+    .stat-card.alerte::after { content: '⚠️ À traiter'; position: absolute; top: 10px; right: 10px; background: #DC2626; color: white; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; }
+    /* Carte « rien à traiter » : coche verte */
+    .stat-card.ok { border-bottom-color: #16A34A; }
+    .stat-card.ok .number { color: #16A34A; }
+    .stat-card.cliquable { cursor: pointer; }
+    @keyframes pulse-alerte { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.35); } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0); } }
+    @media (prefers-reduced-motion: reduce) { .stat-card.alerte { animation: none; } }
 
     /* SECTIONS */
     .section { display: none; }
@@ -222,22 +233,25 @@
           <div class="number" id="stat-active">-</div>
           <div class="label">Offres actives</div>
         </div>
-        <div class="stat-card orange">
-          <div class="number" id="stat-flash">-</div>
-          <div class="label">Offres flash</div>
+        <div class="stat-card cliquable" id="carte-inactives" onclick="ouvrirOffresInactives()" title="Voir les offres inactives">
+          <div class="number" id="stat-inactives">-</div>
+          <div class="label">Offres inactives</div>
         </div>
-        <div class="stat-card" style="cursor:pointer;" onclick="ouvrirUtilisateurs()" title="Voir les utilisateurs">
+        <div class="stat-card cliquable" onclick="ouvrirUtilisateurs()" title="Voir les utilisateurs">
           <div class="number" id="stat-users-actifs">-</div>
           <div class="label">Utilisateurs activés</div>
         </div>
-        <div class="stat-card orange" style="cursor:pointer;" onclick="ouvrirUtilisateurs()" title="Voir les utilisateurs">
+        <div class="stat-card cliquable" id="carte-attente" onclick="ouvrirUtilisateurs()" title="Voir les utilisateurs">
           <div class="number" id="stat-users-attente">-</div>
           <div class="label">En attente d'activation</div>
         </div>
       </div>
 
+      <!-- Offres inactives (hors poubelle) : elles n'apparaissent pas dans l'application -->
+      <div id="dashboard-inactives" style="display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
+
       <!-- Comptes en attente d'activation (nom, email, date de création) -->
-      <div id="dashboard-attente" style="display:none;background:#FFF7ED;border:1px solid #FED7AA;border-radius:12px;padding:14px 18px;margin-bottom:24px;font-size:14px;"></div>
+      <div id="dashboard-attente" style="display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 18px;margin-bottom:24px;font-size:14px;"></div>
 
       <div class="table-wrapper">
         <table>
@@ -1871,19 +1885,25 @@ function togglePassword() {
   // ============================================================
   /**
  * FONCTION : loadDashboard
- * DESCRIPTION : Affiche les statistiques et le tableau récapitulatif des offres
+ * DESCRIPTION : Affiche les statistiques et le tableau récapitulatif des offres.
+ *               Les offres en poubelle ne sont pas comptées. Les offres inactives sont mises
+ *               en évidence (carte « À traiter » + liste) car elles n'apparaissent pas dans l'app.
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : contenu de #stat-total, #stat-flash, #stat-active, #stat-categories, #dashboard-table,
- *           compteurs utilisateurs (via loadDashboardUtilisateurs)
+ * MODIFIE : contenu de #stat-total, #stat-inactives, #stat-active, #stat-categories, #dashboard-table,
+ *           #dashboard-inactives, compteurs utilisateurs (via loadDashboardUtilisateurs)
  */
   function loadDashboard() {
     loadDashboardUtilisateurs();
-    document.getElementById('stat-total').textContent = allOffers.length;
-    document.getElementById('stat-flash').textContent = allOffers.filter(o => o.flash).length;
-    document.getElementById('stat-active').textContent = allOffers.filter(o => o.active).length;
+    const horsPoubelle = allOffers.filter(o => !o.deleted_at);
+    const inactives = horsPoubelle.filter(o => !o.active);
+    document.getElementById('stat-total').textContent = horsPoubelle.length;
+    document.getElementById('stat-inactives').textContent = inactives.length;
+    document.getElementById('stat-active').textContent = horsPoubelle.length - inactives.length;
+    marquerCarteAlerte('carte-inactives', inactives.length);
+    afficherOffresInactives(inactives);
     document.getElementById('stat-categories').textContent = allCategories.length;
-    document.getElementById('header-info').textContent = `${allOffers.length} offres · ${allCategories.length} catégories`;
+    document.getElementById('header-info').textContent = `${horsPoubelle.length} offres · ${allCategories.length} catégories`;
 
     const tbody = document.getElementById('dashboard-table');
     tbody.innerHTML = allOffers.slice(0, 10).map(o => {
@@ -1913,13 +1933,70 @@ function togglePassword() {
     const enAttente = profils.filter(u => !u.actif);
     document.getElementById('stat-users-actifs').textContent = profils.length - enAttente.length;
     document.getElementById('stat-users-attente').textContent = enAttente.length;
+    marquerCarteAlerte('carte-attente', enAttente.length);
     const bloc = document.getElementById('dashboard-attente');
     if (enAttente.length === 0) { bloc.style.display = 'none'; return; }
-    bloc.innerHTML = `<div style="font-weight:700;color:#C2410C;margin-bottom:6px;">⏳ En attente d'activation</div>` +
+    bloc.innerHTML = `<div style="font-weight:700;color:#B91C1C;margin-bottom:6px;">⚠️ ${enAttente.length} compte${enAttente.length > 1 ? 's' : ''} en attente d'activation</div>` +
       enAttente.map(u => `<div>• <strong>${echapperHtml([u.prenom, u.nom].filter(Boolean).join(' ') || '(non renseigné)')}</strong>
         — ${echapperHtml(u.email)} <span style="color:#9CA3AF;">(créé le ${formaterDateHeure(u.created_at)})</span></div>`).join('') +
       `<div style="margin-top:8px;"><a href="#" onclick="ouvrirUtilisateurs();return false;" style="color:#003189;font-weight:600;">→ Gérer dans Utilisateurs</a></div>`;
     bloc.style.display = 'block';
+  }
+
+  /**
+ * FONCTION : marquerCarteAlerte
+ * DESCRIPTION : Met une carte du tableau de bord en évidence quand il y a quelque chose à traiter
+ *               (rouge qui pulse + pastille « À traiter »), en vert quand le compteur est à 0
+ * PARAMÈTRES :
+ *   - idCarte (string) : id de la carte (.stat-card)
+ *   - nombre (number) : valeur du compteur
+ * RETOURNE : rien
+ * MODIFIE : classes alerte / ok de la carte
+ */
+  function marquerCarteAlerte(idCarte, nombre) {
+    const carte = document.getElementById(idCarte);
+    if (!carte) return;
+    carte.classList.toggle('alerte', nombre > 0);
+    carte.classList.toggle('ok', nombre === 0);
+  }
+
+  /**
+ * FONCTION : afficherOffresInactives
+ * DESCRIPTION : Liste sous les compteurs les offres inactives (5 premières), cliquables pour
+ *               ouvrir leur aperçu, avec un lien vers la liste complète filtrée
+ * PARAMÈTRES :
+ *   - inactives (array) : offres inactives hors poubelle
+ * RETOURNE : rien
+ * MODIFIE : #dashboard-inactives
+ */
+  function afficherOffresInactives(inactives) {
+    const bloc = document.getElementById('dashboard-inactives');
+    if (!bloc) return;
+    if (inactives.length === 0) { bloc.style.display = 'none'; return; }
+    const MAX = 5;
+    bloc.innerHTML = `<div style="font-weight:700;color:#B91C1C;margin-bottom:6px;">⚠️ ${inactives.length} offre${inactives.length > 1 ? 's' : ''} inactive${inactives.length > 1 ? 's' : ''} — invisible${inactives.length > 1 ? 's' : ''} dans l'application</div>` +
+      inactives.slice(0, MAX).map(o => `<div>• <a href="#" onclick="openOfferPreview('${o.id}');return false;" style="color:#111827;font-weight:600;text-decoration:none;">${echapperHtml(o.title)}</a>
+        <span style="color:#6B7280;">— ${echapperHtml(o.partner_name || '')}</span></div>`).join('') +
+      (inactives.length > MAX ? `<div style="color:#6B7280;margin-top:4px;">… et ${inactives.length - MAX} autre${inactives.length - MAX > 1 ? 's' : ''}</div>` : '') +
+      `<div style="margin-top:8px;"><a href="#" onclick="ouvrirOffresInactives();return false;" style="color:#003189;font-weight:600;">→ Voir les offres inactives</a></div>`;
+    bloc.style.display = 'block';
+  }
+
+  /**
+ * FONCTION : ouvrirOffresInactives
+ * DESCRIPTION : Ouvre la section Offres avec le filtre « Inactives » déjà sélectionné
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : filtres de la liste des offres, section affichée, onglet actif
+ */
+  function ouvrirOffresInactives() {
+    document.getElementById('search-offers').value = '';
+    document.getElementById('filter-category').value = '';
+    const sousCat = document.getElementById('filter-subcategory');
+    if (sousCat) { sousCat.value = ''; sousCat.disabled = true; }
+    document.getElementById('filter-status').value = 'inactive';
+    const bouton = [...document.querySelectorAll('nav button')].find(b => b.textContent.includes('🏷️ Offres'));
+    showSection('offers', bouton);
   }
 
   /**
