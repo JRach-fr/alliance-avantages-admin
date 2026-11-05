@@ -2128,7 +2128,7 @@ function togglePassword() {
   /**
  * FONCTION : afficherOffresTerminees
  * DESCRIPTION : Liste les offres terminées (inactives, date de fin passée) avec la date à laquelle
- *               elles passeront seules à la poubelle ; clic = aperçu de l'offre. Pas d'alerte :
+ *               elles passeront seules à la poubelle (sauf offres hors_cycle, conservées) ; clic = aperçu. Pas d'alerte :
  *               c'est le cycle normal des offres datées.
  * PARAMÈTRES :
  *   - terminees (array) : offres inactives hors poubelle dont la date de fin est passée
@@ -2142,14 +2142,19 @@ function togglePassword() {
     const JOUR = 24 * 3600 * 1000;
     const liste = terminees
       .map(o => ({ o, poubelle: new Date(new Date(o.expires_at).getTime() + PARAMETRES.jours_admin_apres_fin * JOUR) }))
-      .sort((a, b) => a.poubelle - b.poubelle);
+      .sort((a, b) => (a.o.hors_cycle - b.o.hors_cycle) || (a.poubelle - b.poubelle));
+    const nbAuto = terminees.filter(o => !o.hors_cycle).length;
     const pluriel = terminees.length > 1 ? 's' : '';
-    bloc.innerHTML = `<div style="font-weight:700;color:#374151;margin-bottom:6px;">🏁 ${terminees.length} offre${pluriel} terminée${pluriel} — elle${pluriel} passer${terminees.length > 1 ? 'ont' : 'a'} seule${pluriel} à la poubelle</div>` +
+    const suite = nbAuto === 0 ? 'gardée' + pluriel + ' hors tri automatique'
+      : nbAuto === terminees.length ? `elle${pluriel} passer${terminees.length > 1 ? 'ont' : 'a'} seule${pluriel} à la poubelle`
+      : `${nbAuto} passer${nbAuto > 1 ? 'ont' : 'a'} seule${nbAuto > 1 ? 's' : ''} à la poubelle`;
+    bloc.innerHTML = `<div style="font-weight:700;color:#374151;margin-bottom:6px;">🏁 ${terminees.length} offre${pluriel} terminée${pluriel} — ${suite}</div>` +
       liste.map(({ o, poubelle }) => {
         const fin = new Date(o.expires_at).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
         const date = poubelle.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+        const devenir = o.hors_cycle ? 'conservée (offre ancienne, hors tri automatique)' : `poubelle le ${date}`;
         return `<div>• <a href="#" onclick="openOfferPreview('${o.id}');return false;" style="color:#111827;font-weight:600;text-decoration:none;">${echapperHtml(o.title)}</a>
-          <span style="color:#6B7280;">— terminée le ${fin}, poubelle le ${date}</span></div>`;
+          <span style="color:#6B7280;">— terminée le ${fin}, ${devenir}</span></div>`;
       }).join('') +
       `<div style="margin-top:6px;color:#6B7280;font-size:12px;">Pour en garder une : changez sa date de fin (ou retirez-la) puis réactivez-la.</div>`;
     bloc.style.display = 'block';
