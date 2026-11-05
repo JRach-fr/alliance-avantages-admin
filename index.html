@@ -25,7 +25,8 @@
   - Gérer les catégories (modification/suppression/création)
   - Gérer les sous-catégories par catégorie
   - Upload d'images direct vers Supabase Storage
-  - Poubelle avec restauration (365 jours, suppression définitive manuelle ou automatique)
+  - Poubelle avec restauration (durée réglable dans Paramètres, suppression définitive manuelle ou automatique)
+  - Cycle des offres datées : désactivées à leur date de fin, en poubelle après N jours, supprimées après N jours
   - Message de succès/erreur persistant avec titre de l'offre concernée
 
   À VENIR :
@@ -251,6 +252,9 @@
 
       <!-- Offres inactives (hors poubelle) : elles n'apparaissent pas dans l'application -->
       <div id="dashboard-inactives" style="display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
+
+      <!-- Offres terminées (date de fin passée) : passeront seules à la poubelle -->
+      <div id="dashboard-terminees" style="display:none;background:#F3F4F6;border:1px solid #D1D5DB;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
 
       <!-- Offres actives qui expirent bientôt (date de fin dans les 30 prochains jours) -->
       <div id="dashboard-expirent" style="display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
@@ -551,7 +555,7 @@
     <button class="btn-danger" onclick="emptyTrash()">💀 Vider la poubelle</button>
   </div>
   <p style="color:#6B7280;font-size:14px;margin-bottom:16px;">
-    Les offres supprimées sont conservées pendant <strong>365 jours</strong> avant suppression définitive. Vous pouvez les restaurer à tout moment.
+    Les offres supprimées sont conservées pendant <strong><span class="param-jours-poubelle">90</span> jours</strong> avant suppression définitive (automatique, chaque nuit). Vous pouvez les restaurer à tout moment.
   </p>
   <div class="table-wrapper">
     <table>
@@ -732,17 +736,34 @@
     <p style="font-size:12px;color:#9CA3AF;margin-top:8px;">⚠️ Notez bien votre nouveau mot de passe — il ne peut pas être récupéré.</p>
   </div>
 
-  <!-- Poubelle -->
+  <!-- Poubelle et offres terminées (réglages enregistrés dans Supabase, table parametres) -->
   <div class="form-card">
-    <h3>🗑️ Poubelle</h3>
+    <h3>🗑️ Poubelle et offres terminées</h3>
+    <p style="color:#6B7280;font-size:13px;margin-bottom:12px;">
+      Une offre datée apparaît dans le carrousel de l'application quand sa fin approche, se désactive toute seule
+      à sa date de fin, reste visible ici quelques jours, passe à la poubelle, puis est supprimée définitivement.
+      Le tri se fait chaque nuit vers 3 h 40.
+    </p>
     <div class="form-grid">
       <div class="form-group">
-        <label>Délai avant suppression définitive (jours)</label>
-        <input type="number" id="trash-delay" min="1" max="365" value="365">
+        <label>Carrousel de l'app : offres finissant dans les … jours</label>
+        <input type="number" id="param-banniere_jours_avant_fin" min="1" max="730" value="30">
+      </div>
+      <div class="form-group">
+        <label>Carrousel de l'app : nombre maximum d'offres</label>
+        <input type="number" id="param-banniere_max_offres" min="1" max="20" value="5">
+      </div>
+      <div class="form-group">
+        <label>Offre terminée gardée dans l'admin pendant (jours)</label>
+        <input type="number" id="param-jours_admin_apres_fin" min="1" max="730" value="7">
+      </div>
+      <div class="form-group">
+        <label>Durée dans la poubelle avant suppression définitive (jours)</label>
+        <input type="number" id="param-jours_poubelle" min="1" max="730" value="90">
       </div>
     </div>
     <div class="form-actions">
-      <button class="btn-primary" onclick="saveTrashDelay()">💾 Sauvegarder</button>
+      <button class="btn-primary" onclick="enregistrerParametres()">💾 Sauvegarder</button>
     </div>
   </div>
 
@@ -1911,6 +1932,72 @@ function togglePassword() {
     if (Array.isArray(offres)) allOffers = offres;
     if (Array.isArray(categories)) allCategories = categories;
     if (Array.isArray(sousCategories)) allSubcategories = sousCategories;
+    await chargerParametres();
+  }
+
+  /** Réglages partagés (table parametres de Supabase) — valeurs par défaut si la lecture échoue */
+  const PARAMETRES = { banniere_jours_avant_fin: 30, banniere_max_offres: 5, jours_admin_apres_fin: 7, jours_poubelle: 90 };
+
+  /**
+ * FONCTION : chargerParametres
+ * DESCRIPTION : Lit les réglages de la table parametres (durées du carrousel, des offres terminées
+ *               et de la poubelle) et met à jour les textes qui les affichent
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : PARAMETRES, champs #param-*, textes .param-jours-poubelle
+ */
+  async function chargerParametres() {
+    try {
+      const lignes = await supabaseQuery('parametres', { select: 'cle,valeur' });
+      if (Array.isArray(lignes)) lignes.forEach(l => { if (l.cle in PARAMETRES) PARAMETRES[l.cle] = Number(l.valeur); });
+    } catch (e) { /* on garde les valeurs par défaut */ }
+    Object.keys(PARAMETRES).forEach(cle => {
+      const champ = document.getElementById('param-' + cle);
+      if (champ && document.activeElement !== champ) champ.value = PARAMETRES[cle];
+    });
+    document.querySelectorAll('.param-jours-poubelle').forEach(el => { el.textContent = PARAMETRES.jours_poubelle; });
+  }
+
+  /**
+ * FONCTION : enregistrerParametres
+ * DESCRIPTION : Enregistre dans Supabase les 4 réglages de la carte « Poubelle et offres terminées »
+ *               après vérification des valeurs, puis note la modification dans le journal
+ * PARAMÈTRES : aucun (lit les champs #param-*)
+ * RETOURNE : Promise<void>
+ * MODIFIE : table parametres, PARAMETRES, journal (logs)
+ */
+  async function enregistrerParametres() {
+    const limites = { banniere_jours_avant_fin: 730, banniere_max_offres: 20, jours_admin_apres_fin: 730, jours_poubelle: 730 };
+    const nouveaux = {};
+    for (const cle of Object.keys(PARAMETRES)) {
+      const valeur = parseInt(document.getElementById('param-' + cle).value, 10);
+      if (!valeur || valeur < 1 || valeur > limites[cle]) {
+        showAlert(`❌ Valeur invalide (de 1 à ${limites[cle]})`, 'error', 0);
+        return;
+      }
+      nouveaux[cle] = valeur;
+    }
+    const changes = Object.keys(nouveaux).filter(cle => nouveaux[cle] !== PARAMETRES[cle]);
+    if (changes.length === 0) { showAlert('Aucun changement', 'success', 0); return; }
+    for (const cle of changes) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/parametres?cle=eq.${cle}`, {
+        method: 'PATCH',
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${jetonSession()}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ valeur: nouveaux[cle], updated_at: new Date().toISOString() })
+      });
+      if (!res.ok) { showAlert('❌ Enregistrement impossible', 'error', 0); return; }
+    }
+    const libelles = { banniere_jours_avant_fin: 'carrousel (jours avant fin)', banniere_max_offres: 'carrousel (nb max)', jours_admin_apres_fin: 'gardée après fin', jours_poubelle: 'poubelle' };
+    const detail = changes.map(cle => `${libelles[cle]} : ${PARAMETRES[cle]} → ${nouveaux[cle]}`).join(', ');
+    Object.assign(PARAMETRES, nouveaux);
+    await chargerParametres();
+    showAlert('✅ Réglages enregistrés', 'success', 0);
+    addLog('⚙️ Paramètre modifié', detail);
   }
 
   /**
@@ -1939,20 +2026,24 @@ function togglePassword() {
  * DESCRIPTION : Affiche les statistiques et le tableau récapitulatif des offres.
  *               Les offres en poubelle ne sont pas comptées. Les offres inactives sont mises
  *               en évidence (carte « À traiter » + liste) car elles n'apparaissent pas dans l'app.
+ *               Les offres terminées (date de fin passée) sont listées à part, sans alerte.
  * PARAMÈTRES : aucun
  * RETOURNE : rien
  * MODIFIE : contenu de #stat-total, #stat-inactives, #stat-active, #stat-categories, #dashboard-table,
- *           #dashboard-inactives, compteurs utilisateurs (via loadDashboardUtilisateurs)
+ *           #dashboard-inactives, #dashboard-terminees, compteurs utilisateurs (via loadDashboardUtilisateurs)
  */
   function loadDashboard() {
     loadDashboardUtilisateurs();
     const horsPoubelle = allOffers.filter(o => !o.deleted_at);
-    const inactives = horsPoubelle.filter(o => !o.active);
+    // Terminées : inactives dont la date de fin est passée (cycle normal, rien à traiter)
+    const terminees = horsPoubelle.filter(o => !o.active && estPerimee(o));
+    const inactives = horsPoubelle.filter(o => !o.active && !estPerimee(o));
     document.getElementById('stat-total').textContent = horsPoubelle.length;
     document.getElementById('stat-inactives').textContent = inactives.length;
-    document.getElementById('stat-active').textContent = horsPoubelle.length - inactives.length;
+    document.getElementById('stat-active').textContent = horsPoubelle.filter(o => o.active).length;
     marquerCarteAlerte('carte-inactives', inactives.length);
     afficherOffresInactives(inactives);
+    afficherOffresTerminees(terminees);
     afficherOffresQuiExpirent(horsPoubelle);
     document.getElementById('stat-categories').textContent = allCategories.length;
     document.getElementById('header-info').textContent = `${horsPoubelle.length} offres · ${allCategories.length} catégories`;
@@ -2034,13 +2125,40 @@ function togglePassword() {
     bloc.style.display = 'block';
   }
 
-  /** Nombre de jours avant la date de fin à partir duquel une offre est signalée « expire bientôt » */
-  const JOURS_EXPIRATION_PROCHE = 30;
+  /**
+ * FONCTION : afficherOffresTerminees
+ * DESCRIPTION : Liste les offres terminées (inactives, date de fin passée) avec la date à laquelle
+ *               elles passeront seules à la poubelle ; clic = aperçu de l'offre. Pas d'alerte :
+ *               c'est le cycle normal des offres datées.
+ * PARAMÈTRES :
+ *   - terminees (array) : offres inactives hors poubelle dont la date de fin est passée
+ * RETOURNE : rien
+ * MODIFIE : #dashboard-terminees
+ */
+  function afficherOffresTerminees(terminees) {
+    const bloc = document.getElementById('dashboard-terminees');
+    if (!bloc) return;
+    if (terminees.length === 0) { bloc.style.display = 'none'; return; }
+    const JOUR = 24 * 3600 * 1000;
+    const liste = terminees
+      .map(o => ({ o, poubelle: new Date(new Date(o.expires_at).getTime() + PARAMETRES.jours_admin_apres_fin * JOUR) }))
+      .sort((a, b) => a.poubelle - b.poubelle);
+    const pluriel = terminees.length > 1 ? 's' : '';
+    bloc.innerHTML = `<div style="font-weight:700;color:#374151;margin-bottom:6px;">🏁 ${terminees.length} offre${pluriel} terminée${pluriel} — elle${pluriel} passer${terminees.length > 1 ? 'ont' : 'a'} seule${pluriel} à la poubelle</div>` +
+      liste.map(({ o, poubelle }) => {
+        const fin = new Date(o.expires_at).toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+        const date = poubelle.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris' });
+        return `<div>• <a href="#" onclick="openOfferPreview('${o.id}');return false;" style="color:#111827;font-weight:600;text-decoration:none;">${echapperHtml(o.title)}</a>
+          <span style="color:#6B7280;">— terminée le ${fin}, poubelle le ${date}</span></div>`;
+      }).join('') +
+      `<div style="margin-top:6px;color:#6B7280;font-size:12px;">Pour en garder une : changez sa date de fin (ou retirez-la) puis réactivez-la.</div>`;
+    bloc.style.display = 'block';
+  }
 
   /**
  * FONCTION : afficherOffresQuiExpirent
  * DESCRIPTION : Liste sous les offres inactives les offres actives dont la date de fin arrive
- *               dans les JOURS_EXPIRATION_PROCHE prochains jours, de la plus proche à la plus lointaine,
+ *               dans les N prochains jours (réglage banniere_jours_avant_fin, comme le carrousel de l'app), de la plus proche à la plus lointaine,
  *               avec la date et le nombre de jours restants ; clic = aperçu de l'offre
  * PARAMÈTRES :
  *   - offres (array) : offres hors poubelle
@@ -2051,6 +2169,7 @@ function togglePassword() {
     const bloc = document.getElementById('dashboard-expirent');
     if (!bloc) return;
     const maintenant = Date.now();
+    const JOURS_EXPIRATION_PROCHE = PARAMETRES.banniere_jours_avant_fin;
     const limite = maintenant + JOURS_EXPIRATION_PROCHE * 24 * 3600 * 1000;
     const proches = offres
       .filter(o => o.active && o.expires_at)
@@ -2490,7 +2609,7 @@ function decrireModifications(avant, apres) {
   /**
  * FONCTION : deleteOffer
  * DESCRIPTION : Envoie une offre à la poubelle (suppression douce) en marquant deleted_at
- *               L'offre disparaît de l'app mais reste récupérable pendant 365 jours
+ *               L'offre disparaît de l'app mais reste récupérable (durée : réglage jours_poubelle)
  * PARAMÈTRES :
  *   - id (string) : UUID de l'offre à mettre à la poubelle
  * RETOURNE : rien
@@ -3352,7 +3471,7 @@ async function loadTrash() {
     const cat = allCategories.find(c => c.id === o.category_id);
     const deletedAt = new Date(o.deleted_at);
     const deletedAtStr = deletedAt.toLocaleDateString('fr-FR');
-    const finalDeleteDate = new Date(deletedAt.getTime() + 365 * 24 * 60 * 60 * 1000);
+    const finalDeleteDate = new Date(deletedAt.getTime() + PARAMETRES.jours_poubelle * 24 * 60 * 60 * 1000);
     const finalDeleteStr = finalDeleteDate.toLocaleDateString('fr-FR');
     const daysLeft = Math.ceil((finalDeleteDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
 
@@ -3496,24 +3615,6 @@ async function changePassword() {
   document.getElementById('confirm-password').value = '';
   showPasswordMessage('✅ Mot de passe changé avec succès !', 'success');
   addLog('🔑 Changement mot de passe', 'Mot de passe admin modifié');
-}
-
-/**
- * FONCTION : saveTrashDelay
- * DESCRIPTION : Sauvegarde le délai de suppression définitive de la poubelle
- * PARAMÈTRES : aucun (lit #trash-delay)
- * RETOURNE : rien
- * MODIFIE : localStorage clé 'trash_delay', ajoute une ligne au journal (logs)
- */
-function saveTrashDelay() {
-  const delay = parseInt(document.getElementById('trash-delay').value);
-  if (!delay || delay < 1 || delay > 365) {
-    showAlert('❌ Délai invalide (1 à 365 jours)', 'error', 0);
-    return;
-  }
-  localStorage.setItem('trash_delay', delay);
-  showAlert(`✅ Délai sauvegardé : ${delay} jours`, 'success', 0);
-  addLog('⚙️ Paramètre modifié', `Délai de la poubelle : ${delay} jours`);
 }
 
 /**
@@ -3864,8 +3965,9 @@ async function exportSQL() {
  * MODIFIE : valeurs des champs de la section paramètres
  */
 function loadSettings() {
-  const trashDelay = localStorage.getItem('trash_delay');
-  if (trashDelay) document.getElementById('trash-delay').value = trashDelay;
+  // Ancien délai de poubelle local : remplacé par la table parametres de Supabase
+  try { localStorage.removeItem('trash_delay'); } catch (e) {}
+  chargerParametres();
   
   const email = localStorage.getItem('contact_email');
   if (email) document.getElementById('settings-email').value = email;
