@@ -252,6 +252,9 @@
       <!-- Offres inactives (hors poubelle) : elles n'apparaissent pas dans l'application -->
       <div id="dashboard-inactives" style="display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
 
+      <!-- Offres actives qui expirent bientôt (date de fin dans les 30 prochains jours) -->
+      <div id="dashboard-expirent" style="display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
+
       <!-- Comptes en attente d'activation (nom, email, date de création) -->
       <div id="dashboard-attente" style="display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 18px;margin-bottom:24px;font-size:14px;"></div>
 
@@ -1950,6 +1953,7 @@ function togglePassword() {
     document.getElementById('stat-active').textContent = horsPoubelle.length - inactives.length;
     marquerCarteAlerte('carte-inactives', inactives.length);
     afficherOffresInactives(inactives);
+    afficherOffresQuiExpirent(horsPoubelle);
     document.getElementById('stat-categories').textContent = allCategories.length;
     document.getElementById('header-info').textContent = `${horsPoubelle.length} offres · ${allCategories.length} catégories`;
 
@@ -2027,6 +2031,43 @@ function togglePassword() {
         <span style="color:#6B7280;">— ${echapperHtml(o.partner_name || '')}</span></div>`).join('') +
       (inactives.length > MAX ? `<div style="color:#6B7280;margin-top:4px;">… et ${inactives.length - MAX} autre${inactives.length - MAX > 1 ? 's' : ''}</div>` : '') +
       `<div style="margin-top:8px;"><a href="#" onclick="ouvrirOffresInactives();return false;" style="color:#003189;font-weight:600;">→ Voir les offres inactives</a></div>`;
+    bloc.style.display = 'block';
+  }
+
+  /** Nombre de jours avant la date de fin à partir duquel une offre est signalée « expire bientôt » */
+  const JOURS_EXPIRATION_PROCHE = 30;
+
+  /**
+ * FONCTION : afficherOffresQuiExpirent
+ * DESCRIPTION : Liste sous les offres inactives les offres actives dont la date de fin arrive
+ *               dans les JOURS_EXPIRATION_PROCHE prochains jours, de la plus proche à la plus lointaine,
+ *               avec la date et le nombre de jours restants ; clic = aperçu de l'offre
+ * PARAMÈTRES :
+ *   - offres (array) : offres hors poubelle
+ * RETOURNE : rien
+ * MODIFIE : #dashboard-expirent
+ */
+  function afficherOffresQuiExpirent(offres) {
+    const bloc = document.getElementById('dashboard-expirent');
+    if (!bloc) return;
+    const maintenant = Date.now();
+    const limite = maintenant + JOURS_EXPIRATION_PROCHE * 24 * 3600 * 1000;
+    const proches = offres
+      .filter(o => o.active && o.expires_at)
+      .map(o => ({ o, fin: new Date(o.expires_at).getTime() }))
+      .filter(x => !isNaN(x.fin) && x.fin >= maintenant && x.fin <= limite)
+      .sort((a, b) => a.fin - b.fin);
+    if (proches.length === 0) { bloc.style.display = 'none'; return; }
+    const pluriel = proches.length > 1 ? 's' : '';
+    bloc.innerHTML = `<div style="font-weight:700;color:#B45309;margin-bottom:6px;">⏳ ${proches.length} offre${pluriel} expire${proches.length > 1 ? 'nt' : ''} dans les ${JOURS_EXPIRATION_PROCHE} prochains jours</div>` +
+      proches.map(({ o, fin }) => {
+        const jours = Math.ceil((fin - maintenant) / (24 * 3600 * 1000));
+        const date = new Date(fin).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Paris' });
+        const urgence = jours <= 7 ? 'color:#B91C1C;font-weight:700;' : 'color:#92400E;';
+        return `<div>• <a href="#" onclick="openOfferPreview('${o.id}');return false;" style="color:#111827;font-weight:600;text-decoration:none;">${echapperHtml(o.title)}</a>
+          <span style="${urgence}">— jusqu'au ${date} (${jours <= 1 ? 'dernier jour' : 'encore ' + jours + ' jours'})</span></div>`;
+      }).join('') +
+      `<div style="margin-top:6px;color:#92400E;font-size:12px;">Elles se désactiveront toutes seules après leur date de fin.</div>`;
     bloc.style.display = 'block';
   }
 
