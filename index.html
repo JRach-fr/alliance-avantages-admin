@@ -107,6 +107,8 @@
     .stat-card.ok { border-bottom-color: #16A34A; }
     .stat-card.ok .number { color: #16A34A; }
     .stat-card.cliquable { cursor: pointer; }
+    tr.ligne-cliquable { cursor: pointer; }
+    tr.ligne-cliquable:hover td { background: #F4F6FB; }
     @keyframes pulse-alerte { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.35); } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0); } }
     @media (prefers-reduced-motion: reduce) { .stat-card.alerte { animation: none; } }
 
@@ -1307,6 +1309,14 @@
       enregistrerSession(data);
       return true;
     }
+    // Échec ponctuel (réseau, serveur occupé) alors que le jeton actuel est encore valable :
+    // on garde la session et on réessaie dans une minute, au lieu de renvoyer à la connexion
+    const resteSecondes = (sessionAdmin?.expires_at || 0) - Math.floor(Date.now() / 1000);
+    if (sessionAdmin?.access_token && resteSecondes > 60 && lireRoleJeton(sessionAdmin.access_token) === 'admin') {
+      clearTimeout(minuteurSession);
+      minuteurSession = setTimeout(rafraichirSession, 60 * 1000);
+      return true;
+    }
     effacerSession();
     afficherEcranConnexion();
     return false;
@@ -1548,7 +1558,7 @@ function togglePassword() {
     // Masque le message alert quand on change de section
     document.getElementById('alert').style.display = 'none';
 
-    if (name === 'dashboard') loadDashboard();
+    if (name === 'dashboard') { loadDashboard(); actualiserTableauDeBord(); }
     if (name === 'offers') loadOffers();
     if (name === 'categories') loadCategories();
     if (name === 'add-offer') loadCategoriesForForm();
@@ -1877,11 +1887,46 @@ function togglePassword() {
  * MODIFIE : variables globales allOffers, allCategories, allSubcategories, lance loadDashboard()
  */
   async function loadAll() {
-    allOffers = await supabaseQuery('offers', { select: '*', order: 'created_at.desc,title.asc' }); // plus récentes d'abord, titre en départage (ordre stable)
-    allCategories = await supabaseQuery('categories', { select: '*', order: 'position' });
-    allSubcategories = await supabaseQuery('subcategories', { select: '*', order: 'position' });
+    await rechargerDonnees();
     loadDashboard();
   }
+
+  /**
+ * FONCTION : rechargerDonnees
+ * DESCRIPTION : Relit les offres, catégories et sous-catégories dans Supabase
+ *               (prend en compte les offres ajoutées ou modifiées ailleurs, sans F5)
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : allOffers, allCategories, allSubcategories
+ */
+  async function rechargerDonnees() {
+    const [offres, categories, sousCategories] = await Promise.all([
+      supabaseQuery('offers', { select: '*', order: 'created_at.desc,title.asc' }), // plus récentes d'abord, titre en départage (ordre stable)
+      supabaseQuery('categories', { select: '*', order: 'position' }),
+      supabaseQuery('subcategories', { select: '*', order: 'position' }),
+    ]);
+    if (Array.isArray(offres)) allOffers = offres;
+    if (Array.isArray(categories)) allCategories = categories;
+    if (Array.isArray(sousCategories)) allSubcategories = sousCategories;
+  }
+
+  /**
+ * FONCTION : actualiserTableauDeBord
+ * DESCRIPTION : Recharge les données puis réaffiche le tableau de bord, s'il est affiché
+ *               et qu'un administrateur est connecté
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : données en mémoire, affichage du tableau de bord
+ */
+  async function actualiserTableauDeBord() {
+    if (!sessionAdmin || document.hidden) return;
+    if (!document.getElementById('section-dashboard').classList.contains('active')) return;
+    await rechargerDonnees();
+    loadDashboard();
+  }
+  // Actualisation : toutes les 60 secondes, et dès que l'on revient sur l'onglet du navigateur
+  setInterval(actualiserTableauDeBord, 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) actualiserTableauDeBord(); });
 
   // ============================================================
   // DASHBOARD
@@ -1909,10 +1954,10 @@ function togglePassword() {
     document.getElementById('header-info').textContent = `${horsPoubelle.length} offres · ${allCategories.length} catégories`;
 
     const tbody = document.getElementById('dashboard-table');
-    tbody.innerHTML = allOffers.slice(0, 10).map(o => {
+    tbody.innerHTML = horsPoubelle.slice(0, 10).map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
-      return `<tr${styleLigneOffre(o)}>
-        <td><strong>${o.title}</strong>${badgePerimee(o)}</td>
+      return `<tr${styleLigneOffre(o)} class="ligne-cliquable" onclick="openOfferPreview('${o.id}')" title="Voir l'aperçu de l'offre">
+        <td><strong style="color:#003189;">${o.title}</strong>${badgePerimee(o)}</td>
         <td>${o.partner_name}</td>
         <td>${cat ? cat.icon + ' ' + cat.label : '-'}</td>
         <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
