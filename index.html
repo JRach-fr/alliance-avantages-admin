@@ -693,9 +693,11 @@
     Met une offre en avant avec un affichage spécial dans l'app. 
     Remplace la bannière image si sélectionnée.
   </p>
+  <input type="search" id="banner-featured-search" placeholder="🔍 Rechercher une offre (titre, partenaire…)" oninput="filtrerListeOffres(this.value, 'banner-featured-offer')" style="margin-bottom:6px;">
   <select id="banner-featured-offer">
     <option value="">Aucune offre vedette</option>
   </select>
+  <small id="banner-featured-offer-compteur" style="color:#9CA3AF;"></small>
   <div style="margin-top:8px;">
     <label style="font-size:12px;font-weight:600;color:#374151;">Titre personnalisé (optionnel)</label>
     <input type="text" id="banner-featured-title" placeholder="Ex: ⭐ Offre de la semaine ! 🔥 À ne pas manquer !" style="margin-top:4px;">
@@ -1117,6 +1119,7 @@
       </div>
       <div class="form-group full">
         <label>Offre vedette</label>
+        <input type="search" id="edit-banner-featured-search" placeholder="🔍 Rechercher une offre (titre, partenaire…)" oninput="filtrerListeOffres(this.value, 'edit-banner-featured-offer')" style="margin-bottom:6px;">
         <select id="edit-banner-featured-offer">
           <option value="">Aucune offre vedette</option>
         </select>
@@ -2238,6 +2241,7 @@ function togglePassword() {
   
   async function loadOffers() {
     allOffers = await supabaseQuery('offers', { select: '*', order: 'created_at.desc,title.asc' }); // plus récentes d'abord, titre en départage (ordre stable)
+    await chargerOffreVedette();
     const tbody = document.getElementById('offers-table');
     tbody.innerHTML = allOffers.map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
@@ -2272,6 +2276,7 @@ function togglePassword() {
         </td>
         <td style="display:flex;gap:6px">
           <button class="btn-edit" onclick="openEdit('${o.id}')">✏️ Modifier</button>
+          ${boutonVedette(o)}
           <button class="btn-danger" onclick="deleteOffer('${o.id}')">🗑️</button>
         </td>
       </tr>`;
@@ -2508,6 +2513,7 @@ function filterOffers() {
       </td>
       <td style="display:flex;gap:6px;">
         <button class="btn-edit" onclick="openEdit('${o.id}')">✏️ Modifier</button>
+        ${boutonVedette(o)}
         <button class="btn-danger" onclick="deleteOffer('${o.id}')">🗑️</button>
       </td>
     </tr>`;
@@ -3692,6 +3698,109 @@ async function uploadBannerImage(input) {
   }
 }
 
+/** Id de l'offre actuellement en vedette (bannière active avec featured_offer_id), ou null */
+let idOffreVedette = null;
+
+/**
+ * FONCTION : chargerOffreVedette
+ * DESCRIPTION : Lit la bannière active pour savoir quelle offre est en vedette dans l'app
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : idOffreVedette
+ */
+async function chargerOffreVedette() {
+  try {
+    const actives = await supabaseQuery('banners', { select: 'featured_offer_id', filter: 'active=eq.true' });
+    idOffreVedette = Array.isArray(actives) && actives[0] ? actives[0].featured_offer_id : null;
+  } catch (e) { idOffreVedette = null; }
+}
+
+/**
+ * FONCTION : boutonVedette
+ * DESCRIPTION : Bouton ⭐ d'une ligne d'offre : met l'offre en vedette dans l'application,
+ *               ou indique qu'elle l'est déjà
+ * PARAMÈTRES :
+ *   - o (object) : offre
+ * RETOURNE : string — HTML du bouton
+ * MODIFIE : rien
+ */
+function boutonVedette(o) {
+  if (o.id === idOffreVedette) {
+    return `<button class="btn-edit" style="background:#FF6B00;color:white;border-color:#FF6B00;cursor:default;" title="Cette offre est en vedette dans l'application" disabled>⭐ Vedette</button>`;
+  }
+  if (!o.active || o.deleted_at) return '';
+  return `<button class="btn-edit" onclick="mettreEnVedette('${o.id}')" title="Mettre cette offre en vedette sur l'accueil de l'application">☆ Vedette</button>`;
+}
+
+/**
+ * FONCTION : mettreEnVedette
+ * DESCRIPTION : Met une offre en vedette sur l'accueil de l'application en un clic :
+ *               réutilise sa bannière « vedette » si elle existe, sinon la crée,
+ *               puis l'active (les autres bannières sont désactivées)
+ * PARAMÈTRES :
+ *   - idOffre (string) : UUID de l'offre
+ * RETOURNE : Promise<void>
+ * MODIFIE : table banners (création éventuelle + activation), idOffreVedette, journal (logs), liste des offres
+ */
+async function mettreEnVedette(idOffre) {
+  const offre = allOffers.find(o => o.id === idOffre);
+  if (!offre) return;
+  if (!confirm(`Mettre « ${offre.title} » en vedette sur l'accueil de l'application ?\n\nLa bannière actuellement affichée sera remplacée (elle reste sauvegardée).`)) return;
+
+  const existantes = await supabaseQuery('banners', { select: 'id,name', filter: `featured_offer_id=eq.${idOffre}` });
+  let banniere = Array.isArray(existantes) && existantes[0] ? existantes[0] : null;
+  if (!banniere) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/banners`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${jetonSession()}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify({ name: `Vedette — ${offre.title}`, featured_offer_id: idOffre, featured_title: '⭐ Offre vedette', active: false })
+    });
+    const lignes = res.ok ? await res.json() : [];
+    banniere = lignes[0];
+    if (!banniere) { showAlert('❌ Impossible de créer la bannière vedette', 'error', 0); return; }
+  }
+  await activateBanner(banniere.id, banniere.name);
+  addLog('⭐ Offre mise en vedette', offre.title);
+  await chargerOffreVedette();
+  if (document.getElementById('search-offers')) filterOffers();
+}
+
+/**
+ * FONCTION : filtrerListeOffres
+ * DESCRIPTION : Filtre les choix d'une liste déroulante d'offres selon le texte tapé
+ *               (titre, partenaire ou réduction ; chaque mot tapé doit y figurer, accents et majuscules ignorés)
+ *               et sélectionne la première offre trouvée
+ * PARAMÈTRES :
+ *   - texte (string) : texte recherché
+ *   - idListe (string) : id du <select> à filtrer
+ * RETOURNE : rien
+ * MODIFIE : visibilité des options et choix du <select>, compteur à côté du champ
+ */
+function filtrerListeOffres(texte, idListe) {
+  const liste = document.getElementById(idListe);
+  if (!liste) return;
+  const simplifier = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const recherche = simplifier(texte.trim());
+  const mots = recherche.split(/\s+/).filter(Boolean); // chaque mot doit apparaître, dans n'importe quel ordre
+  let premiere = null, nb = 0;
+  [...liste.options].forEach(opt => {
+    if (!opt.value) { opt.hidden = false; return; }
+    const libelle = simplifier(opt.textContent);
+    const ok = mots.every(m => libelle.includes(m));
+    opt.hidden = !ok;
+    if (ok) { nb++; if (!premiere) premiere = opt; }
+  });
+  if (recherche && premiere) liste.value = premiere.value;
+  if (recherche && !premiere) liste.value = '';
+  const compteur = document.getElementById(idListe + '-compteur');
+  if (compteur) compteur.textContent = recherche ? `${nb} offre${nb > 1 ? 's' : ''} trouvée${nb > 1 ? 's' : ''}` : '';
+}
+
 /**
  * FONCTION : saveBanner
  * DESCRIPTION : Sauvegarde une nouvelle bannière dans Supabase
@@ -3756,6 +3865,8 @@ function resetBannerForm() {
   document.getElementById('banner-image-url').value = '';
   document.getElementById('banner-offer-id').value = '';
   document.getElementById('banner-featured-offer').value = '';
+  document.getElementById('banner-featured-search').value = '';
+  filtrerListeOffres('', 'banner-featured-offer');
   document.getElementById('banner-featured-title').value = '';
   document.getElementById('banner-image-thumb').style.display = 'none';
   document.getElementById('banner-upload-status').style.display = 'none';
@@ -4558,6 +4669,7 @@ async function openEditBanner(id) {
   if (!banner) return;
 
   document.getElementById('edit-banner-id').value = banner.id;
+  document.getElementById('edit-banner-featured-search').value = '';
   document.getElementById('edit-banner-name').value = banner.name || '';
   document.getElementById('edit-banner-message').value = banner.message || '';
   document.getElementById('edit-banner-image-url').value = banner.image_url || '';
