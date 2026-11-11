@@ -650,27 +650,43 @@
     <h2>⚙️ Paramètres</h2>
   </div>
 
-    <!-- Bannière événement -->
-<div class="form-card" style="border-bottom-color:#FF6B00;">
-  <h3>🎄 Bannières événement</h3>
+    <!-- Bannières : événements (image + lien) et offres vedettes, programmables -->
+<div class="form-card" style="border-bottom-color:#FF6B00;" id="carte-bannieres">
+  <h3>🖼️ Bannières</h3>
   <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">
-    Préparez vos bannières à l'avance et activez-les quand vous voulez.
-    <br><strong>Proportion recommandée : 2:1 (ex : 1200x600px) — l'appli affiche les bannières en 2:1 ; un autre format est rogné en haut et en bas</strong>
+    Une seule bannière s'affiche à la fois dans l'appli, choisie automatiquement :
+    <strong>un événement en cours passe toujours devant une offre vedette</strong> ;
+    à type égal, celle qui se termine le plus tôt. Préparez-les à l'avance avec leurs dates.
+    <br><strong>Format : 2:1 (1200x600)</strong> — toute image est mise au format automatiquement.
   </p>
 
-  <!-- Formulaire ajout bannière -->
-  <div style="background:#F4F6FB;border-radius:10px;padding:16px;margin-bottom:20px;">
-    <h4 style="color:#001F5E;margin-bottom:14px;">➕ Nouvelle bannière</h4>
+  <div id="formulaire-banniere" style="background:#F4F6FB;border-radius:10px;padding:16px;margin-bottom:20px;">
+    <h4 id="titre-formulaire-banniere" style="color:#001F5E;margin-bottom:14px;">➕ Nouvelle bannière</h4>
+    <input type="hidden" id="banner-id">
+    <div class="form-group full" style="margin-bottom:12px;">
+      <label>Type *</label>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;">
+        <label style="text-transform:none;font-size:14px;cursor:pointer;"><input type="radio" name="banner-type" value="evenement" checked onchange="basculerTypeBanniere()"> 🎉 Événement (Black Friday, Noël, soldes, message…)</label>
+        <label style="text-transform:none;font-size:14px;cursor:pointer;"><input type="radio" name="banner-type" value="vedette" onchange="basculerTypeBanniere()"> ⭐ Offre vedette</label>
+      </div>
+    </div>
     <div class="form-grid">
       <div class="form-group">
         <label>Nom * (pour la retrouver facilement)</label>
-        <input type="text" id="banner-name" placeholder="Ex: Noël 2026, Été 2026...">
+        <input type="text" id="banner-name" placeholder="Ex : Black Friday 2026, Joyeux Noël...">
       </div>
       <div class="form-group">
-        <label>Message (optionnel)</label>
-        <input type="text" id="banner-message" placeholder="Ex: Joyeux Noël ! Offres spéciales...">
+        <label>Affichée du … au …</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="datetime-local" id="banner-debut" title="Début (vide = tout de suite)">
+          <span>→</span>
+          <input type="datetime-local" id="banner-fin" title="Fin (vide = sans fin)">
+        </div>
+        <small style="color:#9CA3AF;">Début vide = dès maintenant. Fin vide = jusqu'à ce que vous l'arrêtiez.</small>
       </div>
-      <div class="form-group full">
+
+      <!-- Événement -->
+      <div class="form-group full bloc-evenement">
         <label>Image *</label>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="file" id="banner-image-file" accept="image/*" onchange="uploadBannerImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
@@ -680,39 +696,45 @@
           <img id="banner-image-thumb" src="" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:8px;">
         </div>
       </div>
-      <div class="form-group full">
-        <label>Offre mise en avant (optionnel)</label>
-        <select id="banner-offer-id">
-          <option value="">Aucune — bannière sans lien</option>
-        </select>
-        <small style="color:#9CA3AF;">En cliquant sur la bannière, l'utilisateur sera redirigé vers cette offre.</small>
+      <div class="form-group full bloc-evenement">
+        <label>Lien (facultatif)</label>
+        <input type="url" id="banner-lien" placeholder="https://www.allianceavantages.fr/... (page qui regroupe les offres)">
+        <small style="color:#9CA3AF;">Uniquement une page du site allianceavantages.fr. Vide = bannière sans lien (ex. « Joyeux Noël »). Ouvert à partir de l'appli 1.1.</small>
       </div>
-      <div class="form-group full" style="border-top:2px dashed #FF6B00;padding-top:16px;margin-top:8px;">
-  <label style="color:#FF6B00;font-size:13px;font-weight:700;">⭐ OFFRE VEDETTE (optionnel)</label>
-  <p style="font-size:12px;color:#6B7280;margin-bottom:10px;">
-    Met une offre en avant avec un affichage spécial dans l'app. 
-    Remplace la bannière image si sélectionnée.
-  </p>
-  <input type="search" id="banner-featured-search" placeholder="🔍 Rechercher une offre (titre, partenaire…)" oninput="filtrerListeOffres(this.value, 'banner-featured-offer')" style="margin-bottom:6px;">
-  <select id="banner-featured-offer">
-    <option value="">Aucune offre vedette</option>
-  </select>
-  <small id="banner-featured-offer-compteur" style="color:#9CA3AF;"></small>
-  <div style="margin-top:8px;">
-    <label style="font-size:12px;font-weight:600;color:#374151;">Titre personnalisé (optionnel)</label>
-    <input type="text" id="banner-featured-title" placeholder="Ex: ⭐ Offre de la semaine ! 🔥 À ne pas manquer !" style="margin-top:4px;">
-    <small style="color:#9CA3AF;">Laissez vide pour utiliser le titre de l'offre.</small>
-  </div>
-</div>
+      <div class="form-group bloc-evenement">
+        <label>Message sous l'image (facultatif)</label>
+        <input type="text" id="banner-message" placeholder="Ex : Black Friday : jusqu'au 30 novembre">
+      </div>
+      <div class="form-group bloc-evenement">
+        <label>Offre ouverte au toucher dans l'appli 1.0 (facultatif)</label>
+        <select id="banner-offer-id">
+          <option value="">Aucune</option>
+        </select>
+        <small style="color:#9CA3AF;">Secours tant que tous n'ont pas l'appli 1.1 : utilisée seulement s'il n'y a pas de lien.</small>
+      </div>
+
+      <!-- Offre vedette -->
+      <div class="form-group full bloc-vedette" style="display:none;">
+        <label>Offre mise en vedette *</label>
+        <input type="search" id="banner-featured-search" placeholder="🔍 Rechercher une offre (titre, partenaire…)" oninput="filtrerListeOffres(this.value, 'banner-featured-offer')" style="margin-bottom:6px;">
+        <select id="banner-featured-offer">
+          <option value="">Choisir une offre…</option>
+        </select>
+        <small id="banner-featured-offer-compteur" style="color:#9CA3AF;"></small>
+      </div>
+      <div class="form-group full bloc-vedette" style="display:none;">
+        <label>Titre au-dessus de l'offre (facultatif)</label>
+        <input type="text" id="banner-featured-title" placeholder="Ex : ⭐ Offre de la semaine ! (vide = ⭐ Offre vedette)">
+      </div>
     </div>
     <div class="form-actions">
-      <button class="btn-primary" onclick="saveBanner()">💾 Sauvegarder la bannière</button>
-      <button onclick="resetBannerForm()" style="background:#6B7280;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;">🔄 Réinitialiser</button>
+      <button class="btn-primary" onclick="saveBanner()">💾 Enregistrer la bannière</button>
+      <button onclick="resetBannerForm()" style="background:#6B7280;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;">🔄 Annuler / vider</button>
     </div>
   </div>
 
-  <!-- Liste des bannières sauvegardées -->
-  <h4 style="color:#001F5E;margin-bottom:12px;">📋 Bannières sauvegardées</h4>
+  <!-- Liste des bannières -->
+  <h4 style="color:#001F5E;margin-bottom:12px;">📋 Bannières</h4>
   <div id="banners-list" style="display:flex;flex-direction:column;gap:10px;">
     <p style="color:#9CA3AF;font-size:13px;">Chargement...</p>
   </div>
@@ -1084,59 +1106,6 @@
   
 <!-- MODAL EDIT -->
 
-<!-- MODAL EDIT BANNIERE -->
-<div class="modal-overlay" id="edit-banner-modal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>✏️ Modifier la bannière</h3>
-      <button class="modal-close" onclick="closeEditBanner()">×</button>
-    </div>
-    <div class="form-grid">
-      <input type="hidden" id="edit-banner-id">
-      <div class="form-group full">
-        <label>Nom *</label>
-        <input type="text" id="edit-banner-name" placeholder="Ex: Noël 2026">
-      </div>
-      <div class="form-group full">
-        <label>Message (optionnel)</label>
-        <input type="text" id="edit-banner-message" placeholder="Ex: Joyeux Noël !">
-      </div>
-      <div class="form-group full">
-        <label>Image</label>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <input type="file" id="edit-banner-image-file" accept="image/*" onchange="uploadEditBannerImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
-          <input type="url" id="edit-banner-image-url" placeholder="Ou collez une URL directement...">
-          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Tous formats : mise en 1200x600 (2:1) automatique.</small>
-          <div id="edit-banner-upload-status" style="font-size:12px;display:none;"></div>
-          <img id="edit-banner-image-thumb" src="" style="display:none;width:100%;max-height:120px;object-fit:cover;border-radius:8px;">
-        </div>
-      </div>
-      <div class="form-group full">
-        <label>Offre mise en avant</label>
-        <select id="edit-banner-offer-id">
-          <option value="">Aucune</option>
-        </select>
-      </div>
-      <div class="form-group full">
-        <label>Offre vedette</label>
-        <input type="search" id="edit-banner-featured-search" placeholder="🔍 Rechercher une offre (titre, partenaire…)" oninput="filtrerListeOffres(this.value, 'edit-banner-featured-offer')" style="margin-bottom:6px;">
-        <select id="edit-banner-featured-offer">
-          <option value="">Aucune offre vedette</option>
-        </select>
-      </div>
-      <div class="form-group full">
-        <label>Titre offre vedette</label>
-        <input type="text" id="edit-banner-featured-title" placeholder="Ex: ⭐ Offre de la semaine !">
-      </div>
-    </div>
-    <div class="form-actions" style="margin-top:20px;">
-      <button class="btn-primary" onclick="saveEditBanner()">💾 Sauvegarder</button>
-      <button class="btn-danger" onclick="closeEditBanner()">Annuler</button>
-    </div>
-  </div>
-</div>
-
-  
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
     <div class="modal-header">
@@ -3822,38 +3791,32 @@ function boutonVedette(o) {
 
 /**
  * FONCTION : mettreEnVedette
- * DESCRIPTION : Met une offre en vedette sur l'accueil de l'application en un clic :
- *               réutilise sa bannière « vedette » si elle existe, sinon la crée,
- *               puis l'active (les autres bannières sont désactivées)
+ * DESCRIPTION : Met une offre en vedette en un clic : réutilise sa bannière « vedette » si elle existe,
+ *               sinon la crée, la met en service sans dates et met en pause les autres vedettes.
+ *               Un événement en cours reste affiché devant elle.
  * PARAMÈTRES :
  *   - idOffre (string) : UUID de l'offre
  * RETOURNE : Promise<void>
- * MODIFIE : table banners (création éventuelle + activation), idOffreVedette, journal (logs), liste des offres
+ * MODIFIE : table banners, choix de la bannière affichée, idOffreVedette, journal (logs), liste des offres
  */
 async function mettreEnVedette(idOffre) {
   const offre = allOffers.find(o => o.id === idOffre);
   if (!offre) return;
-  if (!confirm(`Mettre « ${offre.title} » en vedette sur l'accueil de l'application ?\n\nLa bannière actuellement affichée sera remplacée (elle reste sauvegardée).`)) return;
+  if (!confirm(`Mettre « ${offre.title} » en vedette sur l'accueil de l'application ?\n\nLes autres offres vedettes seront mises en pause (elles restent sauvegardées). Un événement en cours (Black Friday, Noël…) reste affiché en priorité.`)) return;
 
-  const existantes = await supabaseQuery('banners', { select: 'id,name', filter: `featured_offer_id=eq.${idOffre}` });
-  let banniere = Array.isArray(existantes) && existantes[0] ? existantes[0] : null;
-  if (!banniere) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/banners`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${jetonSession()}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify({ name: `Vedette — ${offre.title}`, featured_offer_id: idOffre, featured_title: '⭐ Offre vedette', active: false })
-    });
-    const lignes = res.ok ? await res.json() : [];
-    banniere = lignes[0];
-    if (!banniere) { showAlert('❌ Impossible de créer la bannière vedette', 'error', 0); return; }
+  const vedettes = await supabaseQuery('banners', { select: 'id,featured_offer_id,en_service', filter: 'type=eq.vedette' });
+  for (const b of (Array.isArray(vedettes) ? vedettes : [])) {
+    if (b.featured_offer_id !== idOffre && b.en_service) await supabaseUpdate('banners', b.id, { en_service: false });
   }
-  await activateBanner(banniere.id, banniere.name);
+  const existante = (Array.isArray(vedettes) ? vedettes : []).find(b => b.featured_offer_id === idOffre);
+  if (existante) {
+    await supabaseUpdate('banners', existante.id, { en_service: true, debut: null, fin: null });
+  } else {
+    await supabaseInsert('banners', { name: `Vedette — ${offre.title}`, type: 'vedette', featured_offer_id: idOffre, featured_title: '⭐ Offre vedette', en_service: true, active: false });
+  }
+  const affichee = await choisirBanniereAffichee();
   addLog('⭐ Offre mise en vedette', offre.title);
+  showAlert(affichee && !affichee.startsWith('Vedette') ? `⭐ Vedette enregistrée. Elle s'affichera après l'événement en cours (« ${affichee} »).` : '⭐ Offre en vedette sur l\'accueil.', 'success', 0);
   await chargerOffreVedette();
   if (document.getElementById('search-offers')) filterOffers();
 }
@@ -3889,205 +3852,309 @@ function filtrerListeOffres(texte, idListe) {
   if (compteur) compteur.textContent = recherche ? `${nb} offre${nb > 1 ? 's' : ''} trouvée${nb > 1 ? 's' : ''}` : '';
 }
 
+/** Seules adresses acceptées pour le lien d'une bannière */
+const LIEN_BANNIERE_AUTORISE = /^https:\/\/www\.allianceavantages\.fr\//;
+
+/**
+ * FONCTION : choisirBanniereAffichee
+ * DESCRIPTION : Demande au serveur de recalculer la bannière affichée dans l'appli
+ *               (fonction choisir_banniere_affichee, aussi lancée chaque heure)
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<string|null> — nom de la bannière affichée
+ * MODIFIE : banners.active (côté serveur)
+ */
+async function choisirBanniereAffichee() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/choisir_banniere_affichee`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+    return res.ok ? await res.json() : null;
+  } catch (e) { return null; }
+}
+
+/**
+ * FONCTION : typeBanniereChoisi
+ * DESCRIPTION : Type coché dans le formulaire de bannière
+ * PARAMÈTRES : aucun
+ * RETOURNE : string — 'evenement' ou 'vedette'
+ * MODIFIE : rien
+ */
+function typeBanniereChoisi() {
+  return document.querySelector('input[name="banner-type"]:checked')?.value || 'evenement';
+}
+
+/**
+ * FONCTION : basculerTypeBanniere
+ * DESCRIPTION : Affiche les champs propres au type choisi (événement ou offre vedette)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : affichage des blocs .bloc-evenement / .bloc-vedette
+ */
+function basculerTypeBanniere() {
+  const vedette = typeBanniereChoisi() === 'vedette';
+  document.querySelectorAll('.bloc-evenement').forEach(el => { el.style.display = vedette ? 'none' : ''; });
+  document.querySelectorAll('.bloc-vedette').forEach(el => { el.style.display = vedette ? '' : 'none'; });
+}
+
+/**
+ * FONCTION : dateVersChamp
+ * DESCRIPTION : Convertit une date de la base en valeur pour un champ datetime-local (heure locale)
+ * PARAMÈTRES :
+ *   - iso (string|null) : date ISO
+ * RETOURNE : string — 'AAAA-MM-JJTHH:MM' ou ''
+ * MODIFIE : rien
+ */
+function dateVersChamp(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); const z = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+}
+
+/**
+ * FONCTION : formaterDateCourte
+ * DESCRIPTION : Date lisible pour la liste des bannières (ex. « 30/11/2026 23:59 »)
+ * PARAMÈTRES :
+ *   - iso (string|null) : date ISO
+ * RETOURNE : string
+ * MODIFIE : rien
+ */
+function formaterDateCourte(iso) {
+  return iso ? new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+}
+
 /**
  * FONCTION : saveBanner
- * DESCRIPTION : Sauvegarde une nouvelle bannière dans Supabase
- *               La bannière est sauvegardée mais pas activée automatiquement
- * PARAMÈTRES : aucun (lit les champs #banner-*)
- * RETOURNE : rien
- * MODIFIE : insère une bannière dans la table banners, recharge la liste
+ * DESCRIPTION : Crée ou modifie une bannière (événement ou offre vedette) après vérification
+ *               des champs, puis recalcule la bannière affichée
+ * PARAMÈTRES : aucun (lit le formulaire #formulaire-banniere)
+ * RETOURNE : Promise<void>
+ * MODIFIE : table banners, journal (logs), liste des bannières
  */
 async function saveBanner() {
-  const name = document.getElementById('banner-name').value.trim();
-  const imageUrl = document.getElementById('banner-image-url').value.trim();
-  const message = document.getElementById('banner-message').value.trim();
-  const offerId = document.getElementById('banner-offer-id').value;
-  const featuredOfferId = document.getElementById('banner-featured-offer').value;
-  const featuredTitle = document.getElementById('banner-featured-title').value.trim();
+  const id = document.getElementById('banner-id').value;
+  const type = typeBanniereChoisi();
+  const valeur = idc => document.getElementById(idc).value.trim();
+  const debutTxt = valeur('banner-debut'), finTxt = valeur('banner-fin');
+  const debut = debutTxt ? new Date(debutTxt).toISOString() : null;
+  const fin = finTxt ? new Date(finTxt).toISOString() : null;
+  if (debut && fin && new Date(fin) <= new Date(debut)) { showAlert('❌ La date de fin doit être après la date de début', 'error', 0); return; }
 
-   // Le nom est optionnel si une offre vedette est sélectionnée
-  const finalName = name || (featuredOfferId ? 
-      allOffers.find(o => o.id === featuredOfferId)?.title || 'Offre vedette' 
-      : null);
-
-  if (!finalName) {
-      showAlert('❌ Donnez un nom à la bannière ou sélectionnez une offre vedette', 'error', 0);
-      return;
-  }
-  
-  
-  if (!imageUrl && !featuredOfferId) {
-    showAlert('❌ Ajoutez une image ou sélectionnez une offre vedette', 'error', 0);
-    return;
-  }
-  const ok = await supabaseInsert('banners', {
-    name:finalName,
-    image_url: imageUrl || null,
-    message: message || null,
-    offer_id: offerId || null,
-    featured_offer_id: featuredOfferId || null,
-    featured_title: featuredTitle || null,
-    active: false
-  });
-  
-  if (ok) {
-    showAlert(`✅ Bannière "${finalName}" sauvegardée !`, 'success', 0);
-    addLog('🎄 Bannière sauvegardée', `"${finalName}"`);
-    resetBannerForm();
-    loadBanners();
+  let donnees;
+  if (type === 'evenement') {
+    const imageUrl = valeur('banner-image-url'), lien = valeur('banner-lien');
+    const nom = valeur('banner-name');
+    if (!nom) { showAlert('❌ Donnez un nom à la bannière', 'error', 0); return; }
+    if (!imageUrl) { showAlert('❌ Ajoutez une image', 'error', 0); return; }
+    if (lien && !LIEN_BANNIERE_AUTORISE.test(lien)) { showAlert('❌ Le lien doit être une page de https://www.allianceavantages.fr/', 'error', 0); return; }
+    donnees = { name: nom, type, image_url: imageUrl, lien_url: lien || null, message: valeur('banner-message') || null,
+      offer_id: valeur('banner-offer-id') || null, featured_offer_id: null, featured_title: null, debut, fin };
   } else {
-    showAlert('❌ Erreur lors de la sauvegarde', 'error', 0);
+    const idOffre = valeur('banner-featured-offer');
+    if (!idOffre) { showAlert('❌ Choisissez l\'offre à mettre en vedette', 'error', 0); return; }
+    const offre = allOffers.find(o => o.id === idOffre);
+    donnees = { name: valeur('banner-name') || `Vedette — ${offre ? offre.title : ''}`, type, featured_offer_id: idOffre,
+      featured_title: valeur('banner-featured-title') || '⭐ Offre vedette', image_url: null, lien_url: null, message: null, offer_id: null, debut, fin };
   }
+
+  let ok;
+  if (id) {
+    const anciennes = await supabaseQuery('banners', { select: 'image_url', filter: `id=eq.${id}` });
+    ok = await supabaseUpdate('banners', id, donnees);
+    const ancienne = Array.isArray(anciennes) && anciennes[0] ? anciennes[0].image_url : null;
+    if (ok && ancienne && ancienne !== donnees.image_url) await supprimerImageSiInutilisee(ancienne);
+  } else {
+    ok = await supabaseInsert('banners', { ...donnees, en_service: true, active: false });
+  }
+  if (!ok) { showAlert('❌ Erreur lors de l\'enregistrement', 'error', 0); return; }
+
+  const affichee = await choisirBanniereAffichee();
+  addLog(id ? '✏️ Modification bannière' : '🖼️ Bannière créée', `"${donnees.name}"` +
+    (debut || fin ? ` (du ${formaterDateCourte(debut) || 'maintenant'} au ${formaterDateCourte(fin) || 'sans fin'})` : ''));
+  showAlert(`✅ Bannière « ${donnees.name} » enregistrée.` + (affichee ? ` Affichée maintenant : « ${affichee} ».` : ''), 'success', 0);
+  resetBannerForm();
+  loadBanners();
 }
 
 /**
  * FONCTION : resetBannerForm
- * DESCRIPTION : Réinitialise le formulaire de création de bannière
+ * DESCRIPTION : Vide le formulaire de bannière et le remet en mode « nouvelle bannière »
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : vide tous les champs #banner-*
+ * MODIFIE : champs du formulaire de bannière
  */
 function resetBannerForm() {
-  document.getElementById('banner-name').value = '';
-  document.getElementById('banner-message').value = '';
-  document.getElementById('banner-image-url').value = '';
-  document.getElementById('banner-offer-id').value = '';
-  document.getElementById('banner-featured-offer').value = '';
-  document.getElementById('banner-featured-search').value = '';
+  ['banner-id', 'banner-name', 'banner-message', 'banner-image-url', 'banner-lien', 'banner-offer-id',
+   'banner-featured-offer', 'banner-featured-search', 'banner-featured-title', 'banner-debut', 'banner-fin', 'banner-image-file']
+    .forEach(idc => { const el = document.getElementById(idc); if (el) el.value = ''; });
   filtrerListeOffres('', 'banner-featured-offer');
-  document.getElementById('banner-featured-title').value = '';
+  document.querySelector('input[name="banner-type"][value="evenement"]').checked = true;
+  basculerTypeBanniere();
   document.getElementById('banner-image-thumb').style.display = 'none';
   document.getElementById('banner-upload-status').style.display = 'none';
+  document.getElementById('titre-formulaire-banniere').textContent = '➕ Nouvelle bannière';
+}
+
+/**
+ * FONCTION : openEditBanner
+ * DESCRIPTION : Charge une bannière dans le formulaire pour la modifier (dates, image, lien, offre…)
+ * PARAMÈTRES :
+ *   - id (string) : UUID de la bannière
+ * RETOURNE : Promise<void>
+ * MODIFIE : champs du formulaire de bannière, défilement vers le formulaire
+ */
+async function openEditBanner(id) {
+  const lignes = await supabaseQuery('banners', { select: '*', filter: `id=eq.${id}` });
+  const b = Array.isArray(lignes) ? lignes[0] : null;
+  if (!b) return;
+  resetBannerForm();
+  document.getElementById('banner-id').value = b.id;
+  document.querySelector(`input[name="banner-type"][value="${b.type}"]`).checked = true;
+  basculerTypeBanniere();
+  const remplir = (idc, v) => { document.getElementById(idc).value = v || ''; };
+  remplir('banner-name', b.name); remplir('banner-message', b.message); remplir('banner-image-url', b.image_url);
+  remplir('banner-lien', b.lien_url); remplir('banner-offer-id', b.offer_id); remplir('banner-featured-offer', b.featured_offer_id);
+  remplir('banner-featured-title', b.featured_title);
+  remplir('banner-debut', dateVersChamp(b.debut)); remplir('banner-fin', dateVersChamp(b.fin));
+  if (b.image_url) { const t = document.getElementById('banner-image-thumb'); t.src = b.image_url; t.style.display = 'block'; }
+  document.getElementById('titre-formulaire-banniere').textContent = `✏️ Modifier « ${b.name} »`;
+  document.getElementById('formulaire-banniere').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/**
+ * FONCTION : statutBanniere
+ * DESCRIPTION : Statut d'une bannière pour la liste de l'admin
+ * PARAMÈTRES :
+ *   - b (object) : bannière
+ * RETOURNE : object — { texte, couleur, fond }
+ * MODIFIE : rien
+ */
+function statutBanniere(b) {
+  const maintenant = Date.now();
+  if (b.active) return { texte: '🟢 Affichée', couleur: '#065F46', fond: '#D1FAE5' };
+  if (!b.en_service) return { texte: '⏸️ En pause', couleur: '#6B7280', fond: '#F3F4F6' };
+  if (b.fin && new Date(b.fin).getTime() <= maintenant) return { texte: '🏁 Terminée', couleur: '#6B7280', fond: '#F3F4F6' };
+  if (b.debut && new Date(b.debut).getTime() > maintenant) return { texte: '🕒 Programmée', couleur: '#1E40AF', fond: '#DBEAFE' };
+  if (b.type === 'vedette') {
+    const o = allOffers.find(x => x.id === b.featured_offer_id);
+    if (!o || !o.active || o.deleted_at) return { texte: '⚠️ Offre inactive', couleur: '#B45309', fond: '#FEF3C7' };
+  }
+  return { texte: '⏳ En attente (une autre passe devant)', couleur: '#92400E', fond: '#FEF3C7' };
 }
 
 /**
  * FONCTION : loadBanners
- * DESCRIPTION : Charge et affiche la liste de toutes les bannières depuis Supabase
+ * DESCRIPTION : Affiche toutes les bannières avec leur type, leurs dates, leur lien et leur statut
+ *               (affichée, programmée, en attente, en pause, terminée)
  * PARAMÈTRES : aucun
- * RETOURNE : rien
+ * RETOURNE : Promise<void>
  * MODIFIE : contenu de #banners-list
  */
 async function loadBanners() {
   const banners = await supabaseQuery('banners', { select: '*', order: 'created_at.desc' });
   const container = document.getElementById('banners-list');
-
-  if (!banners.length) {
-    container.innerHTML = '<p style="color:#9CA3AF;font-size:13px;">Aucune bannière sauvegardée</p>';
+  if (!Array.isArray(banners) || !banners.length) {
+    container.innerHTML = '<p style="color:#9CA3AF;font-size:13px;">Aucune bannière</p>';
     return;
   }
-
+  // Affichée d'abord, puis programmées / en attente, puis en pause et terminées
+  const rang = b => { const t = statutBanniere(b).texte; return t.includes('Affichée') ? 0 : t.includes('Programmée') || t.includes('attente') ? 1 : 2; };
+  banners.sort((a, b) => rang(a) - rang(b));
   container.innerHTML = banners.map(b => {
-    const offer = allOffers.find(o => o.id === b.offer_id);
+    const st = statutBanniere(b);
+    const offre = allOffers.find(o => o.id === (b.type === 'vedette' ? b.featured_offer_id : b.offer_id));
+    const visuel = b.type === 'vedette'
+      ? (offre && offre.image_url ? offre.image_url : '')
+      : (b.image_url || '');
+    const periode = (b.debut || b.fin) ? `📅 ${b.debut ? 'du ' + formaterDateCourte(b.debut) : 'dès maintenant'} ${b.fin ? 'au ' + formaterDateCourte(b.fin) : '— sans fin'}` : '📅 Sans dates';
     return `
     <div style="background:white;border-radius:10px;border:1px solid #E5E7EB;border-left:4px solid ${b.active ? '#10B981' : '#E5E7EB'};overflow:hidden;">
       <div style="display:flex;gap:12px;padding:12px;">
-        <img src="${b.image_url}" style="width:120px;height:68px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">
-        <div style="flex:1;">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <strong style="color:#001F5E;">${b.name}</strong>
-            ${b.active ? '<span class="badge badge-green">Active</span>' : '<span class="badge" style="background:#F3F4F6;color:#6B7280;">Inactive</span>'}
+        ${visuel ? `<img src="${visuel}" style="width:120px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : ''}
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+            <strong style="color:#001F5E;">${b.type === 'vedette' ? '⭐' : '🎉'} ${echapperHtml(b.name)}</strong>
+            <span class="badge" style="background:${st.fond};color:${st.couleur};white-space:nowrap;">${st.texte}</span>
           </div>
-          ${b.message ? `<p style="font-size:12px;color:#6B7280;margin:0 0 4px;">${b.message}</p>` : ''}
-          ${offer ? `<p style="font-size:11px;color:#9CA3AF;margin:0;">🔗 ${offer.title}</p>` : ''}
-          <p style="font-size:11px;color:#9CA3AF;margin:4px 0 0;">${new Date(b.created_at).toLocaleDateString('fr-FR')}</p>
+          <p style="font-size:12px;color:#6B7280;margin:0 0 2px;">${periode}</p>
+          ${b.type === 'vedette' ? `<p style="font-size:12px;color:#6B7280;margin:0;">Offre : ${offre ? echapperHtml(offre.title) : '(introuvable)'}</p>` : ''}
+          ${b.lien_url ? `<p style="font-size:12px;margin:0;">🔗 <a href="${b.lien_url}" target="_blank" rel="noopener" style="color:#003189;">${echapperHtml(b.lien_url)}</a></p>` : (b.type === 'evenement' ? '<p style="font-size:12px;color:#9CA3AF;margin:0;">Sans lien</p>' : '')}
         </div>
       </div>
       <div style="display:flex;gap:8px;padding:8px 12px;background:#F4F6FB;border-top:1px solid #E5E7EB;">
-        ${b.active 
-          ? `<button class="btn-edit" onclick="deactivateBanner('${b.id}', '${b.name}')">⏸️ Désactiver</button>`
-          : `<button class="btn-primary" onclick="activateBanner('${b.id}', '${b.name}')">▶️ Activer</button>`
-        }
-        ${b.featured_offer_id 
-        ? '' 
-        : `<button class="btn-edit" onclick="openEditBanner('${b.id}')">✏️ Modifier</button>`
-        }
-        <button class="btn-danger" onclick="deleteBanner('${b.id}', '${b.name}', '${b.image_url}')">🗑️ Supprimer</button>
+        <button class="btn-edit" onclick="openEditBanner('${b.id}')">✏️ Modifier</button>
+        ${b.en_service
+          ? `<button class="btn-edit" onclick="basculerServiceBanniere('${b.id}', false)">⏸️ Mettre en pause</button>`
+          : `<button class="btn-primary" onclick="basculerServiceBanniere('${b.id}', true)">▶️ Remettre en service</button>`}
+        <button class="btn-danger" onclick="deleteBanner('${b.id}')">🗑️ Supprimer</button>
       </div>
     </div>`;
   }).join('');
 }
 
 /**
- * FONCTION : activateBanner
- * DESCRIPTION : Active une bannière et désactive toutes les autres
- *               Une seule bannière peut être active à la fois
+ * FONCTION : basculerServiceBanniere
+ * DESCRIPTION : Met une bannière en pause ou la remet en service, puis recalcule la bannière affichée
  * PARAMÈTRES :
- *   - id (string) : UUID de la bannière à activer
- *   - name (string) : nom de la bannière pour le log
- * RETOURNE : rien
- * MODIFIE : champ active dans Supabase pour toutes les bannières, recharge la liste
+ *   - id (string) : UUID de la bannière
+ *   - enService (boolean) : true = en service, false = en pause
+ * RETOURNE : Promise<void>
+ * MODIFIE : banners.en_service, bannière affichée, journal (logs), liste des bannières
  */
-async function activateBanner(id, name) {
-  // Désactive toutes les bannières d'abord
-  const allBanners = await supabaseQuery('banners', { select: 'id' });
-  for (const b of allBanners) {
-    await supabaseUpdate('banners', b.id, { active: false });
-  }
-  // Active la bannière choisie
-  const ok = await supabaseUpdate('banners', id, { active: true });
-  if (ok) {
-    showAlert(`✅ Bannière "${name}" activée !`, 'success', 0);
-    addLog('▶️ Bannière activée', `"${name}"`);
-    loadBanners();
-  } else {
-    showAlert('❌ Erreur lors de l\'activation', 'error', 0);
-  }
+async function basculerServiceBanniere(id, enService) {
+  const ok = await supabaseUpdate('banners', id, { en_service: enService });
+  if (!ok) { showAlert('❌ Erreur', 'error', 0); return; }
+  const affichee = await choisirBanniereAffichee();
+  const lignes = await supabaseQuery('banners', { select: 'name', filter: `id=eq.${id}` });
+  const nom = Array.isArray(lignes) && lignes[0] ? lignes[0].name : '';
+  addLog(enService ? '▶️ Bannière remise en service' : '⏸️ Bannière mise en pause', `"${nom}"`);
+  showAlert(`✅ C'est fait. Affichée maintenant : ${affichee ? '« ' + affichee + ' »' : 'aucune bannière (logo en filigrane)'}.`, 'success', 0);
+  loadBanners();
 }
 
 /**
- * FONCTION : deactivateBanner
- * DESCRIPTION : Désactive une bannière sans la supprimer
- *               La bannière reste sauvegardée et peut être réactivée à tout moment
+ * FONCTION : supprimerImageSiInutilisee
+ * DESCRIPTION : Efface une image du stockage si plus aucune offre ni bannière ne l'utilise
  * PARAMÈTRES :
- *   - id (string) : UUID de la bannière à désactiver
- *   - name (string) : nom de la bannière pour le journal des actions
- * RETOURNE : rien
- * MODIFIE : champ active = false dans Supabase, recharge la liste, ajoute un log
+ *   - url (string) : adresse publique de l'image
+ * RETOURNE : Promise<void>
+ * MODIFIE : stockage offers-images
  */
-  
-async function deactivateBanner(id, name) {
-  const ok = await supabaseUpdate('banners', id, { active: false });
-  if (ok) {
-    showAlert('✅ Bannière désactivée', 'success', 0);
-    addLog('⏸️ Bannière désactivée', `"${name}"`);
-    loadBanners();
-  } else {
-    showAlert('❌ Erreur lors de la désactivation', 'error', 0);
-  }
+async function supprimerImageSiInutilisee(url) {
+  if (!url || !url.includes('/offers-images/')) return;
+  const nom = url.split('/offers-images/')[1];
+  const filtre = `image_url=like.*${encodeURIComponent('/offers-images/' + nom)}`;
+  const [o, b] = await Promise.all([
+    supabaseQuery('offers', { select: 'id', filter: filtre }),
+    supabaseQuery('banners', { select: 'id', filter: filtre }),
+  ]);
+  if ((Array.isArray(o) && o.length) || (Array.isArray(b) && b.length)) return;
+  await fetch(`${SUPABASE_URL}/storage/v1/object/offers-images/${nom}`, {
+    method: 'DELETE', headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}` }
+  });
 }
 
 /**
  * FONCTION : deleteBanner
- * DESCRIPTION : Supprime définitivement une bannière et son image dans Supabase Storage
+ * DESCRIPTION : Supprime définitivement une bannière (et son image si plus rien ne l'utilise),
+ *               puis recalcule la bannière affichée
  * PARAMÈTRES :
  *   - id (string) : UUID de la bannière
- *   - name (string) : nom pour la confirmation et le log
- *   - imageUrl (string) : URL de l'image pour la supprimer du storage
- * RETOURNE : rien
- * MODIFIE : supprime la bannière dans Supabase et l'image dans Storage
+ * RETOURNE : Promise<void>
+ * MODIFIE : table banners, stockage, journal (logs), liste des bannières
  */
-async function deleteBanner(id, name, imageUrl) {
-  if (!confirm(`Supprimer définitivement la bannière "${name}" et son image ?`)) return;
-
-  // Supprime l'image du storage
-  const fileName = imageUrl.split('/').pop();
-  await fetch(`${SUPABASE_URL}/storage/v1/object/offers-images/${fileName}`, {
-    method: 'DELETE',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${jetonSession()}`,
-    }
-  });
-
-  // Supprime la bannière de la base
+async function deleteBanner(id) {
+  const lignes = await supabaseQuery('banners', { select: 'name,image_url', filter: `id=eq.${id}` });
+  const b = Array.isArray(lignes) ? lignes[0] : null;
+  if (!b || !confirm(`Supprimer définitivement la bannière « ${b.name} » ?`)) return;
   const ok = await supabaseDelete('banners', id);
-  if (ok) {
-    showAlert(`🗑️ Bannière "${name}" supprimée !`, 'success', 0);
-    addLog('🗑️ Bannière supprimée', `"${name}" + image`);
-    loadBanners();
-  } else {
-    showAlert('❌ Erreur lors de la suppression', 'error', 0);
-  }
+  if (!ok) { showAlert('❌ Erreur lors de la suppression', 'error', 0); return; }
+  await supprimerImageSiInutilisee(b.image_url);
+  await choisirBanniereAffichee();
+  addLog('🗑️ Bannière supprimée', `"${b.name}"`);
+  showAlert(`🗑️ Bannière « ${b.name} » supprimée`, 'success', 0);
+  loadBanners();
 }
 
 
@@ -4182,7 +4249,7 @@ function loadSettings() {
   // Remplit le select des offres pour la bannière
   const bannerSelect = document.getElementById('banner-offer-id');
   if (bannerSelect) {
-    bannerSelect.innerHTML = '<option value="">Aucune — bannière sans lien</option>';
+    bannerSelect.innerHTML = '<option value="">Aucune</option>';
     allOffers.filter(o => o.active && !o.deleted_at).forEach(o => {
       bannerSelect.innerHTML += `<option value="${o.id}">${o.title}</option>`;
     });
@@ -4190,7 +4257,7 @@ function loadSettings() {
     // Remplit aussi le select de l'offre vedette
   const featuredSelect = document.getElementById('banner-featured-offer');
   if (featuredSelect) {
-    featuredSelect.innerHTML = '<option value="">Aucune offre vedette</option>';
+    featuredSelect.innerHTML = '<option value="">Choisir une offre…</option>';
     allOffers.filter(o => o.active && !o.deleted_at).forEach(o => {
       featuredSelect.innerHTML += `<option value="${o.id}">${o.discount ? o.discount + ' — ' : ''}${o.title}</option>`;
     });
@@ -4683,136 +4750,6 @@ function simNavigate(screen) {
       ${messages[screen] || ''}
     </div>
   `;
-}
-
-  // ============================================================
-  // EDITION DES BANNIERES
-  // ============================================================
-  /**
-
- /**
- * FONCTION : uploadEditBannerImage
- * DESCRIPTION : Upload une nouvelle image pour une bannière en cours de modification
- *               après mise au format automatique (voir envoyerImagePreparee)
- * PARAMÈTRES :
- *   - input (HTMLInputElement) : l'élément file input
- * RETOURNE : rien
- * MODIFIE : #edit-banner-image-url, #edit-banner-upload-status, #edit-banner-image-thumb
- */
-async function uploadEditBannerImage(input) {
-  await envoyerImagePreparee(input, FORMAT_IMAGE_BANNIERE, 'banner-', { statut: 'edit-banner-upload-status', apercu: 'edit-banner-image-thumb', url: 'edit-banner-image-url' });
-}
-  
-  
-  /**
- * FONCTION : openEditBanner
- * DESCRIPTION : Ouvre la modal de modification d'une bannière et pré-remplit les champs
- * PARAMÈTRES :
- *   - id (string) : UUID de la bannière à modifier
- * RETOURNE : rien
- * MODIFIE : valeurs des champs #edit-banner-*, affichage de #edit-banner-modal
- */
-async function openEditBanner(id) {
-  const banners = await supabaseQuery('banners', { select: '*' });
-  const banner = banners.find(b => b.id === id);
-  if (!banner) return;
-
-  document.getElementById('edit-banner-id').value = banner.id;
-  document.getElementById('edit-banner-featured-search').value = '';
-  document.getElementById('edit-banner-name').value = banner.name || '';
-  document.getElementById('edit-banner-message').value = banner.message || '';
-  document.getElementById('edit-banner-image-url').value = banner.image_url || '';
-  document.getElementById('edit-banner-featured-title').value = banner.featured_title || '';
-
-  // Remplit les selects offres
-  const offerSelect = document.getElementById('edit-banner-offer-id');
-  const featuredSelect = document.getElementById('edit-banner-featured-offer');
-
-  offerSelect.innerHTML = '<option value="">Aucune</option>';
-  featuredSelect.innerHTML = '<option value="">Aucune offre vedette</option>';
-
-  allOffers.filter(o => o.active && !o.deleted_at).forEach(o => {
-    const label = `${o.discount ? o.discount + ' — ' : ''}${o.title}`;
-    offerSelect.innerHTML += `<option value="${o.id}" ${banner.offer_id === o.id ? 'selected' : ''}>${label}</option>`;
-    featuredSelect.innerHTML += `<option value="${o.id}" ${banner.featured_offer_id === o.id ? 'selected' : ''}>${label}</option>`;
-  });
-
-    // Réinitialise les champs upload
-  document.getElementById('edit-banner-upload-status').style.display = 'none';
-  document.getElementById('edit-banner-image-thumb').style.display = 'none';
-  document.getElementById('edit-banner-image-file').value = '';
-  // Affiche l'image actuelle si elle existe
-  if (banner.image_url) {
-    document.getElementById('edit-banner-image-thumb').src = banner.image_url;
-    document.getElementById('edit-banner-image-thumb').style.display = 'block';
-  }
-  document.getElementById('edit-banner-modal').classList.add('open');
-}
-
-/**
- * FONCTION : closeEditBanner
- * DESCRIPTION : Ferme la modal de modification de bannière
- * PARAMÈTRES : aucun
- * RETOURNE : rien
- * MODIFIE : classe CSS de #edit-banner-modal
- */
-function closeEditBanner() {
-  document.getElementById('edit-banner-modal').classList.remove('open');
-}
-
-/**
- * FONCTION : saveEditBanner
- * DESCRIPTION : Sauvegarde les modifications d'une bannière dans Supabase
- * PARAMÈTRES : aucun (lit les champs #edit-banner-*)
- * RETOURNE : rien
- * MODIFIE : la bannière dans Supabase, ferme la modal, recharge la liste
- */
-async function saveEditBanner() {
-  const id = document.getElementById('edit-banner-id').value;
-  const name = document.getElementById('edit-banner-name').value.trim();
-  const message = document.getElementById('edit-banner-message').value.trim();
-  const imageUrl = document.getElementById('edit-banner-image-url').value.trim();
-  const offerId = document.getElementById('edit-banner-offer-id').value;
-  const featuredOfferId = document.getElementById('edit-banner-featured-offer').value;
-  const featuredTitle = document.getElementById('edit-banner-featured-title').value.trim();
-
-  if (!name) {
-    showAlert('❌ Le nom est obligatoire', 'error', 0);
-    return;
-  }
-
-  // Récupère l'ancienne bannière pour comparer les images
-const banners = await supabaseQuery('banners', { select: '*' });
-const oldBanner = banners.find(b => b.id === id);
-
-// Si l'image a changé, supprime l'ancienne du Storage
-if (oldBanner && oldBanner.image_url && imageUrl && oldBanner.image_url !== imageUrl) {
-  const oldFileName = oldBanner.image_url.split('/').pop();
-  await fetch(`${SUPABASE_URL}/storage/v1/object/offers-images/${oldFileName}`, {
-    method: 'DELETE',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${jetonSession()}`,
-    }
-  });
-  addLog('🖼️ Image bannière modifiée', `"${name}" — ancienne image supprimée, nouvelle image enregistrée`);}
-
-const ok = await supabaseUpdate('banners', id, {
-  name,
-  message: message || null,
-  image_url: imageUrl || null,
-  offer_id: offerId || null,
-  featured_offer_id: featuredOfferId || null,
-  featured_title: featuredTitle || null,
-});
-
-  if (ok) {
-    showAlert(`✅ Bannière "${name}" modifiée !`, 'success', 0);
-    addLog('✏️ Modification bannière', `"${name}"${oldBanner?.image_url !== imageUrl ? ' + nouvelle image' : ''}`);    closeEditBanner();
-    loadBanners();
-  } else {
-    showAlert('❌ Erreur lors de la modification', 'error', 0);
-  }
 }
 
   // ============================================================
