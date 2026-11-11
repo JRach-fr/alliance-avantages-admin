@@ -4027,10 +4027,11 @@ async function openEditBanner(id) {
  * DESCRIPTION : Statut d'une bannière pour la liste de l'admin
  * PARAMÈTRES :
  *   - b (object) : bannière
+ *   - affichee (object|null) : bannière affichée en ce moment
  * RETOURNE : object — { texte, couleur, fond }
  * MODIFIE : rien
  */
-function statutBanniere(b) {
+function statutBanniere(b, affichee) {
   const maintenant = Date.now();
   if (b.active) return { texte: '🟢 Affichée', couleur: '#065F46', fond: '#D1FAE5' };
   if (!b.en_service) return { texte: '⏸️ En pause', couleur: '#6B7280', fond: '#F3F4F6' };
@@ -4039,6 +4040,10 @@ function statutBanniere(b) {
   if (b.type === 'vedette') {
     const o = allOffers.find(x => x.id === b.featured_offer_id);
     if (!o || !o.active || o.deleted_at) return { texte: '⚠️ Offre inactive', couleur: '#B45309', fond: '#FEF3C7' };
+  }
+  // Vedette cachée par un événement : l'appli (1.1) la montre dans « Offres du moment »
+  if (b.type === 'vedette' && affichee && affichee.type === 'evenement') {
+    return { texte: '✨ Dans « Offres du moment » (en attente de la fin de l\'événement)', couleur: '#1E40AF', fond: '#DBEAFE' };
   }
   return { texte: '⏳ En attente (une autre passe devant)', couleur: '#92400E', fond: '#FEF3C7' };
 }
@@ -4059,10 +4064,11 @@ async function loadBanners() {
     return;
   }
   // Affichée d'abord, puis programmées / en attente, puis en pause et terminées
-  const rang = b => { const t = statutBanniere(b).texte; return t.includes('Affichée') ? 0 : t.includes('Programmée') || t.includes('attente') ? 1 : 2; };
+  const affichee = banners.find(b => b.active) || null;
+  const rang = b => { const t = statutBanniere(b, affichee).texte; return t.includes('Affichée') ? 0 : /Programmée|attente|Offres du moment/.test(t) ? 1 : 2; };
   banners.sort((a, b) => rang(a) - rang(b));
   container.innerHTML = banners.map(b => {
-    const st = statutBanniere(b);
+    const st = statutBanniere(b, affichee);
     const offre = allOffers.find(o => o.id === (b.type === 'vedette' ? b.featured_offer_id : b.offer_id));
     const visuel = b.type === 'vedette'
       ? (offre && offre.image_url ? offre.image_url : '')
