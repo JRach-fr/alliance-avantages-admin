@@ -655,7 +655,7 @@
   <h3>🎄 Bannières événement</h3>
   <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">
     Préparez vos bannières à l'avance et activez-les quand vous voulez.
-    <br><strong>Proportion recommandée : 16:9 (ex: 1200x675px)</strong>
+    <br><strong>Proportion recommandée : 2:1 (ex : 1200x600px) — l'appli affiche les bannières en 2:1 ; un autre format est rogné en haut et en bas</strong>
   </p>
 
   <!-- Formulaire ajout bannière -->
@@ -675,7 +675,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="file" id="banner-image-file" accept="image/jpeg,image/png,image/jpg" onchange="uploadBannerImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
           <input type="url" id="banner-image-url" placeholder="Ou collez une URL directement...">
-          <small style="color:#9CA3AF;">Format recommandé : JPG, 1200x675px (16:9). Taille max : 1MB.</small>
+          <small style="color:#9CA3AF;">Format recommandé : JPG, 1200x600px (2:1). Taille max : 1MB. Garder le texte important au centre.</small>
           <div id="banner-upload-status" style="font-size:12px;display:none;"></div>
           <img id="banner-image-thumb" src="" style="display:none;width:100%;max-height:160px;object-fit:cover;border-radius:8px;">
         </div>
@@ -1106,7 +1106,7 @@
         <div style="display:flex;flex-direction:column;gap:8px;">
           <input type="file" id="edit-banner-image-file" accept="image/jpeg,image/png,image/jpg" onchange="uploadEditBannerImage(this)" style="padding:8px;border:1px solid #E5E7EB;border-radius:8px;font-size:13px;">
           <input type="url" id="edit-banner-image-url" placeholder="Ou collez une URL directement...">
-          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Format : JPG, 1200x675px.</small>
+          <small style="color:#9CA3AF;">Laissez vide pour conserver l'image actuelle. Format : JPG, 1200x600px (2:1).</small>
           <div id="edit-banner-upload-status" style="font-size:12px;display:none;"></div>
           <img id="edit-banner-image-thumb" src="" style="display:none;width:100%;max-height:120px;object-fit:cover;border-radius:8px;">
         </div>
