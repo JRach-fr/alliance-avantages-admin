@@ -791,6 +791,43 @@
     </div>
   </div>
 
+  <!-- Versions de l'application (table versions_appli de Supabase, lue par l'appli au démarrage) -->
+  <div class="form-card" style="border-bottom-color:#003189;" id="carte-versions">
+    <h3>📲 Versions de l'application</h3>
+    <p style="color:#6B7280;font-size:13px;margin-bottom:12px;">
+      À chaque démarrage, l'application compare son numéro interne à ces réglages.
+      <b>En dessous du « dernier APK »</b> : fenêtre « Nouvelle version disponible » avec Télécharger / Plus tard (revient 3 jours après).
+      <b>En dessous du « minimum accepté »</b> : écran bloquant, l'appli ne s'ouvre plus sans mise à jour — à réserver aux vrais problèmes.<br>
+      Les mises à jour envoyées par Internet (<code>eas update</code>) ne passent pas par ici : elles arrivent toutes seules.
+    </p>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Dernière version (affichée)</label>
+        <input type="text" id="version-derniere" placeholder="Ex : 1.1" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>Numéro interne du dernier APK (versionCode)</label>
+        <input type="number" id="version-derniere-code" min="1" max="9999" placeholder="Ex : 2">
+      </div>
+      <div class="form-group">
+        <label>Numéro interne minimum accepté</label>
+        <input type="number" id="version-min-code" min="1" max="9999" placeholder="Ex : 1">
+      </div>
+      <div class="form-group">
+        <label>Lien de téléchargement de l'APK</label>
+        <input type="url" id="version-lien" placeholder="https://expo.dev/... (lien de l'APK)">
+      </div>
+      <div class="form-group" style="grid-column:1/-1;">
+        <label>Message affiché dans la fenêtre (facultatif)</label>
+        <input type="text" id="version-message" maxlength="300" placeholder="Ex : Nouvel accueil et corrections des bugs signalés">
+      </div>
+    </div>
+    <p id="version-etat" style="font-size:13px;color:#3A4560;margin:4px 0 8px;"></p>
+    <div class="form-actions">
+      <button class="btn-primary" onclick="enregistrerVersionsAppli()">💾 Sauvegarder</button>
+    </div>
+  </div>
+
   <!-- Email -->
   <div class="form-card">
     <h3>📧 Email de contact</h3>
@@ -1561,7 +1598,7 @@ function togglePassword() {
     if (name === 'trash') loadTrash();
     if (name === 'users') loadUsers();
     if (name === 'logs') loadLogs();
-    if (name === 'settings') loadSettings();
+    if (name === 'settings') { loadSettings(); chargerVersionsAppli(); }
     if (name === 'simulator') loadSimulator();
   }
 
@@ -1970,6 +2007,96 @@ function togglePassword() {
     await chargerParametres();
     showAlert('✅ Réglages enregistrés', 'success', 0);
     addLog('⚙️ Paramètre modifié', detail);
+  }
+
+
+  // ============================================================
+  // VERSIONS DE L'APPLICATION (table versions_appli)
+  // ============================================================
+  /** Dernière lecture de la table versions_appli (une seule ligne, id = 1) */
+  let versionsAppli = null;
+
+  /**
+ * FONCTION : decrireEtatVersions
+ * DESCRIPTION : Résume en une phrase ce que verront les utilisateurs avec ces réglages
+ * PARAMÈTRES : v — objet { derniere_version, derniere_version_code, version_min_code, lien_apk }
+ * RETOURNE : string — phrase à afficher sous le formulaire
+ * MODIFIE : rien
+ */
+  function decrireEtatVersions(v) {
+    if (v.derniere_version_code <= 1) return 'Aucune nouvelle version proposée pour l\'instant.';
+    let texte = `Les téléphones avec un APK de numéro inférieur à ${v.derniere_version_code} se verront proposer la version ${v.derniere_version}.`;
+    if (v.version_min_code > 1) texte += ` En dessous de ${v.version_min_code}, la mise à jour est obligatoire.`;
+    else texte += ' Aucune mise à jour obligatoire.';
+    if (!v.lien_apk) texte += ' ⚠️ Pas de lien : la fenêtre n\'aura pas de bouton Télécharger.';
+    return texte;
+  }
+
+  /**
+ * FONCTION : chargerVersionsAppli
+ * DESCRIPTION : Lit la table versions_appli et remplit la carte « Versions de l'application »
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : versionsAppli, champs #version-*, texte #version-etat
+ */
+  async function chargerVersionsAppli() {
+    try {
+      const lignes = await supabaseQuery('versions_appli', { select: 'derniere_version,derniere_version_code,version_min_code,lien_apk,message', filter: 'id=eq.1' });
+      if (!Array.isArray(lignes) || !lignes[0]) return;
+      versionsAppli = lignes[0];
+    } catch (e) { return; }
+    document.getElementById('version-derniere').value = versionsAppli.derniere_version || '';
+    document.getElementById('version-derniere-code').value = versionsAppli.derniere_version_code;
+    document.getElementById('version-min-code').value = versionsAppli.version_min_code;
+    document.getElementById('version-lien').value = versionsAppli.lien_apk || '';
+    document.getElementById('version-message').value = versionsAppli.message || '';
+    document.getElementById('version-etat').textContent = decrireEtatVersions(versionsAppli);
+  }
+
+  /**
+ * FONCTION : enregistrerVersionsAppli
+ * DESCRIPTION : Vérifie puis enregistre les réglages de version ; demande confirmation
+ *               avant de rendre une mise à jour obligatoire, et note le changement au journal
+ * PARAMÈTRES : aucun (lit les champs #version-*)
+ * RETOURNE : Promise<void>
+ * MODIFIE : table versions_appli, versionsAppli, journal (logs)
+ */
+  async function enregistrerVersionsAppli() {
+    const nouveau = {
+      derniere_version: document.getElementById('version-derniere').value.trim(),
+      derniere_version_code: parseInt(document.getElementById('version-derniere-code').value, 10),
+      version_min_code: parseInt(document.getElementById('version-min-code').value, 10),
+      lien_apk: document.getElementById('version-lien').value.trim() || null,
+      message: document.getElementById('version-message').value.trim() || null
+    };
+    if (!/^\d+\.\d+(\.\d+)?$/.test(nouveau.derniere_version)) { showAlert('❌ Dernière version : format attendu 1.1 ou 1.1.2', 'error', 0); return; }
+    if (!nouveau.derniere_version_code || nouveau.derniere_version_code < 1) { showAlert('❌ Numéro interne du dernier APK invalide', 'error', 0); return; }
+    if (!nouveau.version_min_code || nouveau.version_min_code < 1) { showAlert('❌ Numéro minimum invalide', 'error', 0); return; }
+    if (nouveau.version_min_code > nouveau.derniere_version_code) { showAlert('❌ Le minimum ne peut pas dépasser le numéro du dernier APK', 'error', 0); return; }
+    if (nouveau.lien_apk && !/^https:\/\//.test(nouveau.lien_apk)) { showAlert('❌ Le lien doit commencer par https://', 'error', 0); return; }
+    const ancienMin = versionsAppli ? versionsAppli.version_min_code : 1;
+    if (nouveau.version_min_code > ancienMin) {
+      if (!nouveau.lien_apk) { showAlert('❌ Une mise à jour obligatoire demande un lien de téléchargement', 'error', 0); return; }
+      if (!confirm(`⚠️ Mise à jour OBLIGATOIRE\n\nLes téléphones avec un APK de numéro inférieur à ${nouveau.version_min_code} ne pourront plus ouvrir l'application tant qu'ils n'auront pas installé la version ${nouveau.derniere_version}.\n\nContinuer ?`)) return;
+    }
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/versions_appli?id=eq.1`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${jetonSession()}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ ...nouveau, maj_le: new Date().toISOString() })
+    });
+    if (!res.ok) { showAlert('❌ Enregistrement impossible', 'error', 0); return; }
+    const avant = versionsAppli;
+    await chargerVersionsAppli();
+    showAlert('✅ Versions enregistrées', 'success', 0);
+    const detail = avant
+      ? `dernière ${avant.derniere_version} (n° ${avant.derniere_version_code}) → ${nouveau.derniere_version} (n° ${nouveau.derniere_version_code}), minimum ${avant.version_min_code} → ${nouveau.version_min_code}`
+      : `dernière ${nouveau.derniere_version} (n° ${nouveau.derniere_version_code}), minimum ${nouveau.version_min_code}`;
+    addLog('📲 Versions de l\'appli modifiées', detail);
   }
 
   /**
