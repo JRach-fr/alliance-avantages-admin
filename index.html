@@ -153,7 +153,13 @@
     .toggle-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: #003189; }
 
     /* ALERT */
-    .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; display: none; }
+    /* Message de confirmation ou d'erreur : toujours visible, en haut de l'écran, au-dessus des fenêtres */
+    .alert { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 10000;
+             width: min(560px, calc(100vw - 32px)); padding: 14px 44px 14px 16px; border-radius: 10px; font-size: 14px;
+             display: none; box-shadow: 0 8px 24px rgba(0,0,0,0.18); cursor: pointer; animation: alerte-entree .2s ease-out; }
+    .alert .alert-fermer { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); font-size: 16px; opacity: .6; }
+    @keyframes alerte-entree { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    @media (prefers-reduced-motion: reduce) { .alert { animation: none; } }
     .alert-success { background: #D1FAE5; color: #065F46; border-left: 4px solid #10B981; }
     .alert-error { background: #FEE2E2; color: #991B1B; border-left: 4px solid #EF4444; }
 
@@ -219,7 +225,7 @@
   </nav>
 
   <main>
-    <div id="alert" class="alert"></div>
+    <div id="alert" class="alert" role="status" aria-live="polite" onclick="this.style.display='none'" title="Cliquer pour fermer"></div>
 
     <!-- DASHBOARD -->
     <div id="section-dashboard" class="section active">
@@ -4891,23 +4897,34 @@ function simNavigate(screen) {
   /**
  /**
  * FONCTION : showAlert
- * DESCRIPTION : Affiche un message de succès ou d'erreur
+ * DESCRIPTION : Affiche un message de succès ou d'erreur en haut de l'écran, toujours visible
+ *               quelle que soit la position dans la page (et au-dessus des fenêtres ouvertes).
+ *               Un clic le ferme.
  * PARAMÈTRES :
  *   - message (string) : texte à afficher, inclut le titre de l'offre concernée
  *   - type (string) : 'success' ou 'error'
- *   - duration (number) : durée d'affichage en ms (0 = permanent jusqu'à prochaine action)
+ *   - duration (number) : durée d'affichage en ms (0 = automatique : 4 s pour un succès,
+ *                         jusqu'au clic pour une erreur)
  * RETOURNE : rien
- * MODIFIE : contenu, classe CSS et affichage de #alert
+ * MODIFIE : contenu, classe CSS et affichage de #alert, minuteurAlerte
  */
-  
+  /** Minuteur de disparition du message en cours (remis à zéro à chaque nouveau message) */
+  let minuteurAlerte = null;
   function showAlert(message, type, duration = 0) {
     const el = document.getElementById('alert');
     el.textContent = message;
+    const fermer = document.createElement('span');
+    fermer.className = 'alert-fermer';
+    fermer.textContent = '✕';
+    el.appendChild(fermer);
     el.className = `alert alert-${type}`;
+    el.style.display = 'none';
+    void el.offsetWidth; // relance l'animation d'apparition
     el.style.display = 'block';
-    if (duration > 0) {
-      setTimeout(() => el.style.display = 'none', duration);
-    }
+    clearTimeout(minuteurAlerte);
+    // Succès : disparaît seul après 4 s ; erreur : reste jusqu'au clic (sauf durée imposée)
+    const delai = duration > 0 ? duration : (type === 'success' ? 4000 : 0);
+    if (delai > 0) minuteurAlerte = setTimeout(() => { el.style.display = 'none'; }, delai);
   }
 
 /**
