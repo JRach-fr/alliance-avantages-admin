@@ -1083,7 +1083,8 @@
 <!--
   COMPOSANT  : Fiche utilisateur
   DESCRIPTION : Modification par l'administrateur du prénom, du nom, de la ville et du matricule
-                (l'utilisateur ne peut pas modifier ces informations dans l'app)
+                (l'utilisateur ne peut pas modifier ces informations dans l'app),
+                et de l'obligation de changer le mot de passe provisoire
 -->
 <div class="modal-overlay" id="user-edit-modal">
   <div class="modal" style="max-width:520px;">
@@ -1099,6 +1100,13 @@
       <div class="form-group"><label>Ville</label><input type="text" id="user-edit-ville" maxlength="80"></div>
       <div class="form-group"><label>Matricule *</label><input type="text" id="user-edit-matricule" maxlength="7" inputmode="numeric" placeholder="7 chiffres"></div>
     </div>
+    <label id="user-edit-mdp-ligne" style="display:none;align-items:center;gap:10px;margin-top:14px;font-size:14px;cursor:pointer;">
+      <input type="checkbox" id="user-edit-mdp" style="width:18px;height:18px;">
+      🔑 Changement du mot de passe obligatoire à la prochaine ouverture de l'app
+    </label>
+    <p id="user-edit-mdp-aide" style="display:none;font-size:12px;color:#6B7280;margin:6px 0 0 28px;">
+      Décocher pour un compte de démonstration (ex. compte de test Google), dont le mot de passe ne doit pas changer.
+    </p>
     <div style="display:flex;gap:10px;margin-top:18px;">
       <button class="btn-primary" onclick="enregistrerFicheUtilisateur()">💾 Enregistrer</button>
       <button class="btn-danger" style="padding:10px 16px;font-size:14px;" onclick="fermerFicheUtilisateur()">Annuler</button>
@@ -1824,7 +1832,8 @@ function togglePassword() {
   /**
  * FONCTION : ouvrirFicheUtilisateur
  * DESCRIPTION : Ouvre la fiche d'un utilisateur pour modifier prénom, nom, ville et matricule
- *               (seul l'administrateur peut modifier ces informations)
+ *               (seul l'administrateur peut modifier ces informations), et l'obligation de
+ *               changer le mot de passe (case visible si la colonne mdp_a_changer existe)
  * PARAMÈTRES :
  *   - id (string) : identifiant du compte
  * RETOURNE : rien
@@ -1839,6 +1848,11 @@ function togglePassword() {
     document.getElementById('user-edit-nom').value = u.nom || '';
     document.getElementById('user-edit-ville').value = u.ville || '';
     document.getElementById('user-edit-matricule').value = u.matricule || '';
+    // Case « mot de passe à changer » : affichée seulement si la colonne existe dans la base
+    const colonneMdp = Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer');
+    document.getElementById('user-edit-mdp-ligne').style.display = colonneMdp ? 'flex' : 'none';
+    document.getElementById('user-edit-mdp-aide').style.display = colonneMdp ? 'block' : 'none';
+    document.getElementById('user-edit-mdp').checked = u.mdp_a_changer === true;
     document.getElementById('user-edit-modal').classList.add('open');
   }
 
@@ -1855,8 +1869,9 @@ function togglePassword() {
 
   /**
  * FONCTION : enregistrerFicheUtilisateur
- * DESCRIPTION : Enregistre la fiche (prénom, nom en majuscules, ville, matricule) dans la table
- *               profils ; signale un matricule déjà utilisé par un autre compte
+ * DESCRIPTION : Enregistre la fiche (prénom, nom en majuscules, ville, matricule et, si la colonne
+ *               existe, l'obligation de changer le mot de passe) dans la table profils ;
+ *               signale un matricule déjà utilisé par un autre compte
  * PARAMÈTRES : aucun (lit les champs #user-edit-*)
  * RETOURNE : Promise<void>
  * MODIFIE : ligne du profil dans Supabase, liste des utilisateurs, journal
@@ -1880,6 +1895,9 @@ function togglePassword() {
       return;
     }
     donnees.matricule = controle.matricule;
+    const colonneMdp = u && Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer');
+    const mdpAChanger = document.getElementById('user-edit-mdp').checked;
+    if (colonneMdp) donnees.mdp_a_changer = mdpAChanger;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/profils?id=eq.${id}`, {
       method: 'PATCH',
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
@@ -1892,7 +1910,8 @@ function togglePassword() {
       showAlert('❌ ' + (doublon ? 'Ce matricule est déjà utilisé par un autre compte' : (message || 'Enregistrement impossible')), 'error', 6000);
       return;
     }
-    const changements = Object.keys(donnees).filter(k => (u?.[k] || '') !== (donnees[k] || '')).map(k => `${k} : ${u?.[k] || '—'} → ${donnees[k] || '—'}`);
+    const changements = Object.keys(donnees).filter(k => k !== 'mdp_a_changer' && (u?.[k] || '') !== (donnees[k] || '')).map(k => `${k} : ${u?.[k] || '—'} → ${donnees[k] || '—'}`);
+    if (colonneMdp && u.mdp_a_changer !== mdpAChanger) changements.push(`changement de mot de passe obligatoire : ${mdpAChanger ? 'oui' : 'non'}`);
     if (changements.length) addLog('✏️ Utilisateur modifié', `${donnees.prenom} ${donnees.nom} — ${changements.join(', ')}`);
     fermerFicheUtilisateur();
     showAlert('✅ Fiche enregistrée', 'success', 3000);
@@ -1902,7 +1921,8 @@ function togglePassword() {
   /**
  * FONCTION : actionUtilisateur
  * DESCRIPTION : Désactive, active, réinitialise le mot de passe ou supprime un compte
- *               (avec confirmation), via la fonction serveur
+ *               (avec confirmation), via la fonction serveur ; après une réinitialisation,
+ *               remet l'obligation de changer le mot de passe (profils.mdp_a_changer = true)
  * PARAMÈTRES :
  *   - id (string) : identifiant du compte
  *   - action (string) : 'desactiver' | 'activer' | 'reinitialiser_mdp' | 'supprimer'
@@ -1932,6 +1952,14 @@ function togglePassword() {
       supprimer: ['🗑️ Utilisateur supprimé', `${qui} (${u.email})`],
     };
     addLog(journal[action][0], journal[action][1]);
+    // Nouveau mot de passe provisoire : l'utilisateur devra le remplacer à la prochaine ouverture
+    if (action === 'reinitialiser_mdp' && Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer')) {
+      await fetch(`${SUPABASE_URL}/rest/v1/profils?id=eq.${id}`, {
+        method: 'PATCH',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify({ mdp_a_changer: true }),
+      }).catch(() => {});
+    }
     if (action === 'reinitialiser_mdp') afficherIdentifiants(`🔑 Nouveau mot de passe pour ${qui}`, u.email, res.motDePasse);
     else showAlert('✅ ' + journal[action][0], 'success', 3000);
     loadUsers();
