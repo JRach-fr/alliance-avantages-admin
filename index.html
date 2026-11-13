@@ -1711,7 +1711,7 @@ function togglePassword() {
         <td style="white-space:nowrap;">
           <button class="btn-edit" onclick="ouvrirFicheUtilisateur('${u.id}')" title="Modifier les informations">✏️</button>
           ${estMoi ? '' : `
-            <button class="btn-edit" onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')" title="Nouveau mot de passe provisoire">🔑</button>
+            <button class="btn-edit" ${u.mdp_a_changer === true ? 'style="background:#FF6B00;"' : ''} onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')" title="${u.mdp_a_changer === true ? 'Mot de passe provisoire pas encore changé par l\'utilisateur — cliquer pour en créer un nouveau' : 'Nouveau mot de passe provisoire'}">🔑</button>
             ${u.actif
               ? `<button class="btn-orange" style="padding:6px 10px;font-size:12px;" onclick="actionUtilisateur('${u.id}', 'desactiver')" title="Bloquer la connexion">⏸️ Désactiver</button>`
               : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
