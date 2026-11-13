@@ -1473,6 +1473,7 @@ function togglePassword() {
     });
   } catch (e) {}
   effacerSession();
+  masquerIdentifiants();
   afficherEcranConnexion();
   }
 
@@ -1585,7 +1586,8 @@ function togglePassword() {
  *   - name (string) : nom de la section (dashboard, offers, add-offer, categories, trash, users, settings, logs)
  *   - btn (HTMLElement) : le bouton cliqué, passé via this dans le HTML — permet de le marquer comme actif
  * RETOURNE : rien
- * MODIFIE : classes CSS des sections et boutons nav, masque #alert, charge les données si nécessaire
+ * MODIFIE : classes CSS des sections et boutons nav, masque #alert et les identifiants affichés,
+ *           charge les données si nécessaire
  */
   
   function showSection(name, btn) {
@@ -1594,8 +1596,9 @@ function togglePassword() {
     document.getElementById('section-' + name).classList.add('active');
     if (btn) btn.classList.add('active');
 
-    // Masque le message alert quand on change de section
+    // Masque le message alert et tout mot de passe provisoire affiché quand on change de section
     document.getElementById('alert').style.display = 'none';
+    masquerIdentifiants();
 
     if (name === 'dashboard') { loadDashboard(); actualiserTableauDeBord(); }
     if (name === 'offers') loadOffers();
@@ -1710,6 +1713,26 @@ function togglePassword() {
     }).join('');
   }
 
+  /** Minuteur d'effacement automatique de l'encadré des identifiants */
+  let minuteurIdentifiants = null;
+
+  /**
+ * FONCTION : masquerIdentifiants
+ * DESCRIPTION : Efface l'encadré qui montre un mot de passe provisoire (bouton Fermer,
+ *               changement d'onglet, déconnexion, ou 5 minutes après l'affichage),
+ *               pour qu'il ne reste pas visible à l'écran
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : contenu et affichage de #user-result, minuteurIdentifiants
+ */
+  function masquerIdentifiants() {
+    clearTimeout(minuteurIdentifiants);
+    const box = document.getElementById('user-result');
+    if (!box) return;
+    box.innerHTML = '';
+    box.style.display = 'none';
+  }
+
   /**
  * FONCTION : afficherIdentifiants
  * DESCRIPTION : Affiche l'email et le mot de passe provisoire à transmettre à l'utilisateur,
@@ -1729,8 +1752,12 @@ function togglePassword() {
       <div>Email : <strong>${echapperHtml(email)}</strong></div>
       <div>Mot de passe provisoire : <strong style="font-family:monospace;font-size:16px;letter-spacing:1px;">${echapperHtml(motDePasse)}</strong></div>
       <div style="font-size:12px;color:#6B7280;margin-top:8px;">⚠️ Notez-le maintenant : il n'est conservé nulle part et ne sera plus affiché.</div>
-      <button class="btn-primary" style="margin-top:10px;padding:8px 14px;font-size:13px;" id="user-copy-btn">📋 Copier les identifiants</button>`;
+      <button class="btn-primary" style="margin-top:10px;padding:8px 14px;font-size:13px;" id="user-copy-btn">📋 Copier les identifiants</button>
+      <button style="margin-top:10px;margin-left:8px;padding:8px 14px;font-size:13px;background:#6B7280;color:white;border:none;border-radius:8px;cursor:pointer;" onclick="masquerIdentifiants()">✕ Fermer</button>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:6px;">S'efface tout seul dans 5 minutes, ou dès que vous changez d'onglet.</div>`;
     box.style.display = 'block';
+    clearTimeout(minuteurIdentifiants);
+    minuteurIdentifiants = setTimeout(masquerIdentifiants, 5 * 60 * 1000);
     document.getElementById('user-copy-btn').onclick = async () => {
       try { await navigator.clipboard.writeText(texte); document.getElementById('user-copy-btn').textContent = '✅ Copié'; } catch (e) {}
     };
