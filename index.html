@@ -18,6 +18,7 @@
 
  FONCTIONNALITÉS :
   - Tableau de bord avec statistiques
+  - Section Statistiques : activité, utilisateurs, offres, versions, suivi du test Google Play, export CSV
   - Ajouter / modifier / supprimer des offres
   - Prévisualisation de la carte avant validation
   - Activer / désactiver une offre en un clic
@@ -30,7 +31,7 @@
   - Message de succès/erreur persistant avec titre de l'offre concernée
 
   À VENIR :
-  - Section statistiques avancées (graphiques)
+  - Statistiques : compteurs anonymes des offres consultées, clics et recherches (nécessite une nouvelle version de l'appli)
   - Drag & drop pour réordonner les catégories
   - Section paramètres (mot de passe, délai poubelle paramétrable)
   - Sauvegarde complète (app + base SQL)
@@ -174,6 +175,39 @@
     .modal-header h3 { font-size: 18px; font-weight: 700; color: #001F5E; }
     .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6B7280; }
 
+    /* STATISTIQUES */
+    .barre-stats { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+    .periode-stats, .onglets-stats { display: flex; gap: 6px; flex-wrap: wrap; }
+    .periode-stats button, .onglets-stats button { background: white; color: #003189; border: 1px solid #C7D2FE; padding: 7px 14px; border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .periode-stats button.active, .onglets-stats button.active { background: #003189; color: white; border-color: #003189; }
+    .onglets-stats { margin-bottom: 18px; border-bottom: 2px solid #E5E7EB; padding-bottom: 12px; }
+    .bloc-stats { background: white; border-radius: 12px; padding: 18px 20px; box-shadow: 0 2px 8px rgba(0,49,137,0.08); margin-bottom: 18px; }
+    .bloc-stats h3 { font-size: 15px; font-weight: 700; color: #001F5E; margin-bottom: 12px; }
+    #section-stats .aide { font-size: 12px; color: #6B7280; margin-top: 8px; line-height: 1.6; }
+    .titre-tableau { font-size: 15px; font-weight: 700; color: #001F5E; margin: 6px 0 10px; }
+    details.detail-stats { margin-bottom: 18px; }
+    details.detail-stats summary { cursor: pointer; font-size: 14px; font-weight: 600; color: #003189; margin-bottom: 10px; }
+    .deux-colonnes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .graphe { display: flex; align-items: flex-end; gap: 3px; height: 170px; padding-top: 18px; }
+    .graphe .colonne { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+    .graphe .barre { width: 100%; max-width: 38px; background: #003189; border-radius: 4px 4px 0 0; min-height: 2px; position: relative; }
+    .graphe .barre.vide { background: #E5E7EB; }
+    .graphe .barre .valeur { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #374151; white-space: nowrap; }
+    .graphe .etiquette { font-size: 10px; color: #6B7280; margin-top: 4px; white-space: nowrap; overflow: hidden; max-width: 100%; height: 13px; }
+    .barre-horizontale { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 13px; }
+    .barre-horizontale .nom { width: 150px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .barre-horizontale .piste { flex: 1; background: #F4F6FB; border-radius: 4px; height: 14px; }
+    .barre-horizontale .plein { background: #FF6B00; height: 100%; border-radius: 4px; }
+    .barre-horizontale .nb { width: 95px; text-align: right; color: #374151; }
+    .liste-relance { font-size: 13px; line-height: 1.7; }
+    .grille-test td, .grille-test th { padding: 6px 4px; text-align: center; font-size: 12px; }
+    .grille-test td:first-child, .grille-test th:first-child { text-align: left; padding-left: 12px; white-space: nowrap; }
+    .case-jour { display: inline-block; width: 18px; height: 18px; border-radius: 4px; background: #F3F4F6; vertical-align: middle; }
+    .case-jour.ok { background: #16A34A; }
+    .case-jour.futur { background: white; border: 1px dashed #D1D5DB; }
+    .case-jour.aujourdhui { outline: 2px solid #FF6B00; outline-offset: 1px; }
+    @media (max-width: 768px) { .deux-colonnes { grid-template-columns: 1fr; } }
+
     @media (max-width: 768px) {
       .form-grid { grid-template-columns: 1fr; }
       .stats-grid { grid-template-columns: 1fr 1fr; }
@@ -215,6 +249,7 @@
 
   <nav>
     <button class="active" onclick="showSection('dashboard', this)">📊 Tableau de bord</button>
+    <button onclick="showSection('stats', this)">📈 Statistiques</button>
     <button onclick="showSection('offers', this)">🏷️ Offres</button>
     <button onclick="showSection('add-offer', this)">➕ Ajouter une offre</button>
     <button onclick="showSection('categories', this)">📂 Catégories</button>
@@ -648,6 +683,43 @@
       </tbody>
     </table>
   </div>
+</div>
+
+<!--
+  COMPOSANT  : Section Statistiques
+  DESCRIPTION : Statistiques calculées à partir des données déjà enregistrées (profils, connexions,
+                offres, messages Contact, versions). Onglets : vue d'ensemble, utilisateurs, offres,
+                versions, suivi du test Google Play. Export CSV de l'onglet affiché.
+                Les comptes techniques (administrateur, compte « Test Google ») peuvent être exclus.
+-->
+<div id="section-stats" class="section">
+  <div class="section-header">
+    <h2>📈 Statistiques</h2>
+    <button class="btn-primary" onclick="exporterStatsCsv()" title="Télécharger les tableaux de l'onglet affiché (fichier lisible dans Excel)">⬇️ Exporter (CSV)</button>
+  </div>
+
+  <div class="barre-stats">
+    <div class="periode-stats" role="group" aria-label="Période">
+      <button data-jours="7" onclick="changerPeriodeStats(7, this)">7 jours</button>
+      <button data-jours="30" class="active" onclick="changerPeriodeStats(30, this)">30 jours</button>
+      <button data-jours="90" onclick="changerPeriodeStats(90, this)">90 jours</button>
+      <button data-jours="0" onclick="changerPeriodeStats(0, this)">Tout</button>
+    </div>
+    <label class="toggle-item" title="L'administrateur et le compte Test Google (vérificateurs Google) faussent les chiffres">
+      <input type="checkbox" id="stats-exclure-techniques" checked onchange="afficherStats()">
+      Exclure les comptes techniques (admin, Test Google)
+    </label>
+  </div>
+
+  <div class="onglets-stats" role="tablist">
+    <button class="active" data-onglet="ensemble" onclick="changerOngletStats('ensemble', this)">Vue d'ensemble</button>
+    <button data-onglet="utilisateurs" onclick="changerOngletStats('utilisateurs', this)">Utilisateurs</button>
+    <button data-onglet="offres" onclick="changerOngletStats('offres', this)">Offres</button>
+    <button data-onglet="versions" onclick="changerOngletStats('versions', this)">Versions</button>
+    <button data-onglet="testplay" onclick="changerOngletStats('testplay', this)">🧪 Test Google Play</button>
+  </div>
+
+  <div id="stats-contenu"><div class="loading">Chargement...</div></div>
 </div>
 
     <!-- PARAMÈTRES -->
@@ -1591,7 +1663,7 @@ function togglePassword() {
  *               Recharge les données de la section si nécessaire
  *               Masque le message d'alerte au changement de section
  * PARAMÈTRES :
- *   - name (string) : nom de la section (dashboard, offers, add-offer, categories, trash, users, settings, logs)
+ *   - name (string) : nom de la section (dashboard, stats, offers, add-offer, categories, trash, users, settings, logs)
  *   - btn (HTMLElement) : le bouton cliqué, passé via this dans le HTML — permet de le marquer comme actif
  * RETOURNE : rien
  * MODIFIE : classes CSS des sections et boutons nav, masque #alert et les identifiants affichés,
@@ -1614,9 +1686,661 @@ function togglePassword() {
     if (name === 'add-offer') loadCategoriesForForm();
     if (name === 'trash') loadTrash();
     if (name === 'users') loadUsers();
+    if (name === 'stats') loadStats();
     if (name === 'logs') loadLogs();
     if (name === 'settings') { loadSettings(); chargerVersionsAppli(); }
     if (name === 'simulator') loadSimulator();
+  }
+
+  // ============================================================
+  // STATISTIQUES
+  // ============================================================
+  /** Données chargées pour les statistiques : { profils, connexions, offres, categories, messages, versions } */
+  let donneesStats = null;
+  /** Onglet affiché : ensemble, utilisateurs, offres, versions, testplay */
+  let ongletStats = 'ensemble';
+  /** Période en jours (0 = tout) */
+  let periodeStatsJours = 30;
+  /** Date de publication du test fermé (modifiable dans l'onglet, mémorisée dans le navigateur) */
+  const DEBUT_TEST_PAR_DEFAUT = '2026-11-13';
+  const CLE_DEBUT_TEST = 'aa_stats_debut_test';
+  /** Durée du test fermé exigée par Google */
+  const DUREE_TEST_JOURS = 14;
+  /** Noms des jours (getDay() : 0 = dimanche) */
+  const NOMS_JOURS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
+
+  /**
+ * FONCTION : chargerToutesLesLignes
+ * DESCRIPTION : Lit toutes les lignes d'une table, par paquets de 1000
+ *               (Supabase ne renvoie pas plus de 1000 lignes par requête)
+ * PARAMÈTRES :
+ *   - table (string) : nom de la table
+ *   - select (string) : colonnes à lire
+ *   - ordre (string) : tri, ex. 'id.asc' (un tri stable est nécessaire pour la pagination)
+ * RETOURNE : Promise<Array> — toutes les lignes (tableau vide en cas d'erreur)
+ * MODIFIE : rien
+ */
+  async function chargerToutesLesLignes(table, select, ordre) {
+    const lignes = [];
+    const taille = 1000;
+    for (let debut = 0; debut < 200000; debut += taille) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=${select}&order=${ordre}&limit=${taille}&offset=${debut}`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}` },
+      });
+      if (!res.ok) break;
+      const paquet = await res.json();
+      if (!Array.isArray(paquet)) break;
+      lignes.push(...paquet);
+      if (paquet.length < taille) break;
+    }
+    return lignes;
+  }
+
+  /**
+ * FONCTION : loadStats
+ * DESCRIPTION : Charge toutes les données utiles aux statistiques puis affiche l'onglet en cours
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<void>
+ * MODIFIE : donneesStats, #stats-contenu
+ */
+  async function loadStats() {
+    document.getElementById('stats-contenu').innerHTML = '<div class="loading">Chargement des statistiques...</div>';
+    try {
+      const [profils, connexions, offres, categories, messages, versions] = await Promise.all([
+        chargerToutesLesLignes('profils', 'id,email,nom,prenom,ville,actif,nb_connexions,derniere_connexion,created_at,information_lue_le,mdp_a_changer,derniere_version,derniere_plateforme', 'created_at.asc'),
+        chargerToutesLesLignes('connexions', 'id,user_id,evenement,plateforme,version_app,created_at', 'id.asc'),
+        chargerToutesLesLignes('offers', 'id,title,partner_name,discount,category_id,city,expires_at,active,deleted_at,is_ecard,image_url', 'id.asc'),
+        chargerToutesLesLignes('categories', 'id,label,icon,position', 'position.asc'),
+        chargerToutesLesLignes('messages_contact', 'id,sujet,created_at', 'id.asc'),
+        chargerToutesLesLignes('versions_appli', 'derniere_version,derniere_version_code', 'id.asc'),
+      ]);
+      donneesStats = { profils, connexions, offres, categories, messages, versions: versions[0] || null };
+      afficherStats();
+    } catch (e) {
+      document.getElementById('stats-contenu').innerHTML = '<div class="loading">❌ Impossible de charger les statistiques. Réessayez dans un instant.</div>';
+    }
+  }
+
+  /**
+ * FONCTION : changerOngletStats
+ * DESCRIPTION : Affiche un autre onglet des statistiques
+ * PARAMÈTRES :
+ *   - nom (string) : ensemble, utilisateurs, offres, versions ou testplay
+ *   - btn (HTMLElement) : bouton cliqué
+ * RETOURNE : rien
+ * MODIFIE : ongletStats, boutons des onglets, #stats-contenu
+ */
+  function changerOngletStats(nom, btn) {
+    ongletStats = nom;
+    document.querySelectorAll('.onglets-stats button').forEach(b => b.classList.toggle('active', b === btn));
+    afficherStats();
+  }
+
+  /**
+ * FONCTION : changerPeriodeStats
+ * DESCRIPTION : Change la période étudiée (7, 30, 90 jours ou tout)
+ * PARAMÈTRES :
+ *   - jours (number) : nombre de jours, 0 pour tout
+ *   - btn (HTMLElement) : bouton cliqué
+ * RETOURNE : rien
+ * MODIFIE : periodeStatsJours, boutons de période, #stats-contenu
+ */
+  function changerPeriodeStats(jours, btn) {
+    periodeStatsJours = jours;
+    document.querySelectorAll('.periode-stats button').forEach(b => b.classList.toggle('active', b === btn));
+    afficherStats();
+  }
+
+  /**
+ * FONCTION : cleJour
+ * DESCRIPTION : Transforme une date en clé « AAAA-MM-JJ » selon l'heure locale (France)
+ * PARAMÈTRES :
+ *   - date (Date|string) : date à convertir
+ * RETOURNE : string — ex. « 2026-11-15 »
+ * MODIFIE : rien
+ */
+  function cleJour(date) {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  /**
+ * FONCTION : debutJour
+ * DESCRIPTION : Renvoie minuit (heure locale) du jour donné
+ * PARAMÈTRES :
+ *   - date (Date|string) : date de départ
+ * RETOURNE : Date — même jour à 00:00
+ * MODIFIE : rien
+ */
+  function debutJour(date) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  /**
+ * FONCTION : estCompteTechnique
+ * DESCRIPTION : Indique si un compte ne représente pas un vrai utilisateur :
+ *               le compte administrateur connecté, ou le compte « Test Google » (adresse en +google)
+ * PARAMÈTRES :
+ *   - p (object) : profil (email)
+ * RETOURNE : boolean
+ * MODIFIE : rien
+ */
+  function estCompteTechnique(p) {
+    const email = String(p?.email || '').toLowerCase();
+    return email === String(sessionAdmin?.email || '').toLowerCase() || email.includes('+google@');
+  }
+
+  /**
+ * FONCTION : contexteStats
+ * DESCRIPTION : Prépare les données filtrées selon la période et la case « comptes techniques »
+ * PARAMÈTRES : aucun
+ * RETOURNE : object — { profils, idsGardes, connexions (période), toutesConnexions, debut, fin, jours }
+ * MODIFIE : rien
+ */
+  function contexteStats() {
+    const exclure = document.getElementById('stats-exclure-techniques').checked;
+    const profils = donneesStats.profils.filter(p => !exclure || !estCompteTechnique(p));
+    const idsGardes = new Set(profils.map(p => p.id));
+    const toutesConnexions = donneesStats.connexions.filter(c => idsGardes.has(c.user_id));
+    const fin = new Date();
+    let debut;
+    if (periodeStatsJours > 0) {
+      debut = debutJour(fin);
+      debut.setDate(debut.getDate() - (periodeStatsJours - 1));
+    } else {
+      const dates = [...toutesConnexions.map(c => c.created_at), ...profils.map(p => p.created_at)].filter(Boolean).sort();
+      debut = debutJour(dates[0] || fin);
+    }
+    const connexions = toutesConnexions.filter(c => new Date(c.created_at) >= debut);
+    const jours = Math.round((debutJour(fin) - debut) / 86400000) + 1;
+    return { profils, idsGardes, connexions, toutesConnexions, debut, fin, jours };
+  }
+
+  /**
+ * FONCTION : nomProfil
+ * DESCRIPTION : Nom affichable d'un compte (prénom nom, ou email à défaut)
+ * PARAMÈTRES :
+ *   - p (object) : profil
+ * RETOURNE : string — texte échappé, prêt à insérer dans la page
+ * MODIFIE : rien
+ */
+  function nomProfil(p) {
+    const nom = [p?.prenom, p?.nom].filter(Boolean).join(' ');
+    return echapperHtml(nom || p?.email || 'Compte supprimé');
+  }
+
+  /**
+ * FONCTION : carteStat
+ * DESCRIPTION : Petite carte chiffre clé (même style que le tableau de bord)
+ * PARAMÈTRES :
+ *   - nombre (number|string) : valeur affichée
+ *   - libelle (string) : texte sous le chiffre
+ *   - classe (string) : '' (bleu), 'orange' ou 'ok' (vert)
+ * RETOURNE : string — HTML
+ * MODIFIE : rien
+ */
+  function carteStat(nombre, libelle, classe = '') {
+    return `<div class="stat-card ${classe}"><div class="number">${nombre}</div><div class="label">${libelle}</div></div>`;
+  }
+
+  /**
+ * FONCTION : grapheBarres
+ * DESCRIPTION : Dessine un graphique en barres verticales (sans bibliothèque extérieure)
+ * PARAMÈTRES :
+ *   - points (Array<{etiquette, valeur, info}>) : une barre par point ; info = texte au survol
+ *   - couleur (string) : couleur des barres
+ * RETOURNE : string — HTML
+ * MODIFIE : rien
+ */
+  function grapheBarres(points, couleur = '#003189') {
+    const max = Math.max(1, ...points.map(p => p.valeur));
+    // Au-delà de 16 barres, on n'écrit qu'une étiquette sur N pour rester lisible
+    const pas = Math.ceil(points.length / 16);
+    return `<div class="graphe">${points.map((p, i) => `
+      <div class="colonne" title="${echapperHtml(p.info || `${p.etiquette} : ${p.valeur}`)}">
+        <div class="barre ${p.valeur ? '' : 'vide'}" style="height:${Math.max(1, Math.round(p.valeur / max * 100))}%;${p.valeur ? `background:${couleur};` : ''}">
+          ${p.valeur && points.length <= 31 ? `<span class="valeur">${p.valeur}</span>` : ''}
+        </div>
+        <div class="etiquette">${i % pas === 0 ? echapperHtml(p.etiquette) : ''}</div>
+      </div>`).join('')}</div>`;
+  }
+
+  /**
+ * FONCTION : barresHorizontales
+ * DESCRIPTION : Liste de barres horizontales (répartition : villes, catégories, plateformes...)
+ * PARAMÈTRES :
+ *   - lignes (Array<{nom, valeur, texte}>) : texte = valeur affichée à droite (sinon la valeur)
+ * RETOURNE : string — HTML (« Aucune donnée » si la liste est vide)
+ * MODIFIE : rien
+ */
+  function barresHorizontales(lignes) {
+    if (!lignes.length) return '<p class="aide">Aucune donnée.</p>';
+    const max = Math.max(1, ...lignes.map(l => l.valeur));
+    return lignes.map(l => `<div class="barre-horizontale">
+      <span class="nom" title="${echapperHtml(l.nom)}">${echapperHtml(l.nom)}</span>
+      <span class="piste"><span class="plein" style="display:block;width:${Math.round(l.valeur / max * 100)}%;"></span></span>
+      <span class="nb">${l.texte ?? l.valeur}</span>
+    </div>`).join('');
+  }
+
+  /**
+ * FONCTION : tableauStats
+ * DESCRIPTION : Tableau simple (repris tel quel par l'export CSV)
+ * PARAMÈTRES :
+ *   - titre (string) : titre du tableau (sert aussi de titre dans le CSV)
+ *   - entetes (Array<string>) : en-têtes de colonnes
+ *   - lignes (Array<Array<string>>) : cellules (HTML déjà échappé)
+ * RETOURNE : string — HTML
+ * MODIFIE : rien
+ */
+  function tableauStats(titre, entetes, lignes) {
+    const corps = lignes.length
+      ? lignes.map(l => `<tr>${l.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')
+      : `<tr><td colspan="${entetes.length}" style="text-align:center;color:#9CA3AF;">Aucune donnée</td></tr>`;
+    return `<h3 class="titre-tableau">${echapperHtml(titre)}</h3>
+    <div class="table-wrapper" style="margin-bottom:18px;overflow-x:auto;">
+      <table data-titre="${echapperHtml(titre)}"><thead><tr>${entetes.map(e => `<th>${e}</th>`).join('')}</tr></thead><tbody>${corps}</tbody></table>
+    </div>`;
+  }
+
+  /**
+ * FONCTION : afficherStats
+ * DESCRIPTION : Affiche l'onglet en cours avec la période et le filtre choisis
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : #stats-contenu
+ */
+  function afficherStats() {
+    if (!donneesStats) return;
+    const zone = document.getElementById('stats-contenu');
+    const ctx = contexteStats();
+    const rendus = { ensemble: statsEnsemble, utilisateurs: statsUtilisateurs, offres: statsOffres, versions: statsVersions, testplay: statsTestPlay };
+    zone.innerHTML = (rendus[ongletStats] || statsEnsemble)(ctx);
+  }
+
+  /**
+ * FONCTION : activiteParPeriode
+ * DESCRIPTION : Regroupe les connexions par jour (ou par mois si la période dépasse 92 jours)
+ * PARAMÈTRES :
+ *   - ctx (object) : contexte renvoyé par contexteStats
+ * RETOURNE : Array<{etiquette, valeur, info}> — utilisateurs différents par jour ou par mois
+ * MODIFIE : rien
+ */
+  function activiteParPeriode(ctx) {
+    const parMois = ctx.jours > 92;
+    const cle = d => parMois ? cleJour(d).slice(0, 7) : cleJour(d);
+    const groupes = new Map();
+    // Prépare toutes les cases, même vides, pour voir les jours sans activité
+    const curseur = new Date(ctx.debut);
+    while (curseur <= ctx.fin) {
+      groupes.set(cle(curseur), { users: new Set(), ouvertures: 0 });
+      if (parMois) curseur.setMonth(curseur.getMonth() + 1, 1); else curseur.setDate(curseur.getDate() + 1);
+    }
+    groupes.set(cle(ctx.fin), groupes.get(cle(ctx.fin)) || { users: new Set(), ouvertures: 0 });
+    ctx.connexions.forEach(c => {
+      const g = groupes.get(cle(c.created_at));
+      if (!g) return;
+      g.users.add(c.user_id);
+      if (c.evenement !== 'deconnexion') g.ouvertures++;
+    });
+    return [...groupes.entries()].map(([k, g]) => {
+      const etiquette = parMois ? `${k.slice(5, 7)}/${k.slice(2, 4)}` : `${k.slice(8, 10)}/${k.slice(5, 7)}`;
+      return { etiquette, valeur: g.users.size, info: `${etiquette} : ${g.users.size} utilisateur(s), ${g.ouvertures} ouverture(s)` };
+    });
+  }
+
+  /**
+ * FONCTION : statsEnsemble
+ * DESCRIPTION : Onglet « Vue d'ensemble » : chiffres clés, activité, jours et heures d'utilisation
+ * PARAMÈTRES :
+ *   - ctx (object) : contexte renvoyé par contexteStats
+ * RETOURNE : string — HTML de l'onglet
+ * MODIFIE : rien
+ */
+  function statsEnsemble(ctx) {
+    const usage = ctx.connexions.filter(c => c.evenement !== 'deconnexion');
+    const actifs = new Set(ctx.connexions.map(c => c.user_id)).size;
+    const nouveaux = ctx.profils.filter(p => new Date(p.created_at) >= ctx.debut).length;
+    const messages = donneesStats.messages.filter(m => new Date(m.created_at) >= ctx.debut).length;
+    const libellePeriode = periodeStatsJours ? `sur ${periodeStatsJours} jours` : 'depuis le début';
+
+    const parJour = Array(7).fill(0);
+    const parHeure = Array(24).fill(0);
+    usage.forEach(c => { const d = new Date(c.created_at); parJour[d.getDay()]++; parHeure[d.getHours()]++; });
+    // Semaine affichée du lundi au dimanche
+    const ordreJours = [1, 2, 3, 4, 5, 6, 0];
+
+    return `
+      <div class="stats-grid">
+        ${carteStat(actifs, `Utilisateurs actifs ${libellePeriode}`)}
+        ${carteStat(usage.length, `Ouvertures de l'appli ${libellePeriode}`, 'orange')}
+        ${carteStat(nouveaux, `Nouveaux comptes ${libellePeriode}`)}
+        ${carteStat(messages, `Messages Contact ${libellePeriode}`, 'orange')}
+      </div>
+      <div class="bloc-stats">
+        <h3>Utilisateurs actifs ${ctx.jours > 92 ? 'par mois' : 'par jour'}</h3>
+        ${grapheBarres(activiteParPeriode(ctx))}
+        <p class="aide">Un utilisateur actif a ouvert l'appli au moins une fois. Survolez une barre pour voir aussi le nombre d'ouvertures.</p>
+      </div>
+      <div class="deux-colonnes">
+        <div class="bloc-stats">
+          <h3>Ouvertures par jour de la semaine</h3>
+          ${grapheBarres(ordreJours.map(j => ({ etiquette: NOMS_JOURS[j], valeur: parJour[j] })), '#FF6B00')}
+        </div>
+        <div class="bloc-stats">
+          <h3>Ouvertures par heure</h3>
+          ${grapheBarres(parHeure.map((v, h) => ({ etiquette: `${h}h`, valeur: v, info: `${h}h-${h + 1}h : ${v} ouverture(s)` })), '#FF6B00')}
+        </div>
+      </div>
+      <details class="detail-stats"><summary>Voir le détail ${ctx.jours > 92 ? 'mois par mois' : 'jour par jour'}</summary>
+      ${tableauStats(`Activité ${libellePeriode}`, ['Période', 'Utilisateurs actifs', 'Ouvertures'],
+        activiteParPeriode(ctx).map(p => [p.etiquette, String(p.valeur), (p.info.match(/(\d+) ouverture/) || [, '0'])[1]]))}
+      </details>`;
+  }
+
+  /**
+ * FONCTION : statsUtilisateurs
+ * DESCRIPTION : Onglet « Utilisateurs » : comptes, comptes à relancer, villes, activité par compte
+ * PARAMÈTRES :
+ *   - ctx (object) : contexte renvoyé par contexteStats
+ * RETOURNE : string — HTML de l'onglet
+ * MODIFIE : rien
+ */
+  function statsUtilisateurs(ctx) {
+    const maintenant = Date.now();
+    const depuis = jours => maintenant - jours * 86400000;
+    const actifsDepuis = jours => new Set(ctx.toutesConnexions.filter(c => new Date(c.created_at).getTime() >= depuis(jours)).map(c => c.user_id));
+    const actifs7 = actifsDepuis(7);
+    const actifs30 = actifsDepuis(30);
+    const comptesActives = ctx.profils.filter(p => p.actif);
+
+    const jamais = comptesActives.filter(p => !p.derniere_connexion);
+    const inactifs = comptesActives.filter(p => p.derniere_connexion && new Date(p.derniere_connexion).getTime() < depuis(30));
+    const mdp = comptesActives.filter(p => p.mdp_a_changer === true && p.derniere_connexion);
+    const infoNonLue = comptesActives.filter(p => p.derniere_connexion && !p.information_lue_le);
+    const liste = (titre, comptes, detail) => `<div class="bloc-stats">
+      <h3>${titre} <span class="badge ${comptes.length ? 'badge-orange' : 'badge-green'}">${comptes.length}</span></h3>
+      <div class="liste-relance">${comptes.length ? comptes.map(p => `${nomProfil(p)}${detail ? ` <span style="color:#9CA3AF;">· ${detail(p)}</span>` : ''}`).join('<br>') : '<span style="color:#16A34A;">Personne 👍</span>'}</div>
+    </div>`;
+
+    // Répartition par ville (ville du compte saisie par l'admin)
+    const villes = new Map();
+    ctx.profils.forEach(p => {
+      const v = (p.ville || '').trim() || 'Non renseignée';
+      const g = villes.get(v) || { comptes: 0, actifs: 0 };
+      g.comptes++;
+      if (actifs30.has(p.id)) g.actifs++;
+      villes.set(v, g);
+    });
+    const lignesVilles = [...villes.entries()].sort((a, b) => b[1].comptes - a[1].comptes);
+
+    // Activité de chaque compte sur la période
+    const parCompte = new Map();
+    ctx.connexions.forEach(c => {
+      const g = parCompte.get(c.user_id) || { ouvertures: 0, jours: new Set() };
+      if (c.evenement !== 'deconnexion') g.ouvertures++;
+      g.jours.add(cleJour(c.created_at));
+      parCompte.set(c.user_id, g);
+    });
+    const lignesComptes = ctx.profils
+      .map(p => ({ p, g: parCompte.get(p.id) || { ouvertures: 0, jours: new Set() } }))
+      .sort((a, b) => b.g.ouvertures - a.g.ouvertures)
+      .map(({ p, g }) => [nomProfil(p), echapperHtml(p.ville || '—'), String(g.ouvertures), String(g.jours.size), formaterDateHeure(p.derniere_connexion)]);
+
+    return `
+      <div class="stats-grid">
+        ${carteStat(ctx.profils.length, 'Comptes créés')}
+        ${carteStat(comptesActives.length, 'Comptes activés', 'ok')}
+        ${carteStat(actifs7.size, 'Actifs sur 7 jours', 'orange')}
+        ${carteStat(actifs30.size, 'Actifs sur 30 jours')}
+      </div>
+      <div class="deux-colonnes">
+        ${liste('Jamais connectés', jamais, p => 'créé le ' + formaterDateHeure(p.created_at).split(' ')[0])}
+        ${liste('Inactifs depuis plus de 30 jours', inactifs, p => 'vu le ' + formaterDateHeure(p.derniere_connexion).split(' ')[0])}
+        ${liste('Mot de passe provisoire pas encore changé', mdp)}
+        ${liste('Information « données personnelles » pas encore lue', infoNonLue)}
+      </div>
+      <div class="bloc-stats">
+        <h3>Répartition par ville</h3>
+        ${barresHorizontales(lignesVilles.map(([v, g]) => ({ nom: v, valeur: g.comptes, texte: `${g.comptes} compte(s)` })))}
+        <p class="aide">Ville renseignée dans la fiche du compte.</p>
+      </div>
+      ${tableauStats('Comptes par ville', ['Ville', 'Comptes', 'Actifs sur 30 jours'], lignesVilles.map(([v, g]) => [echapperHtml(v), String(g.comptes), String(g.actifs)]))}
+      ${tableauStats(`Activité par compte (${periodeStatsJours ? periodeStatsJours + ' jours' : 'depuis le début'})`, ['Utilisateur', 'Ville', 'Ouvertures', 'Jours actifs', 'Dernière connexion'], lignesComptes)}`;
+  }
+
+  /**
+ * FONCTION : statsOffres
+ * DESCRIPTION : Onglet « Offres » : état du catalogue (catégories, portée, dates, offres à compléter)
+ *               La période ne s'applique pas ici : c'est une photo du catalogue actuel.
+ * PARAMÈTRES :
+ *   - ctx (object) : contexte renvoyé par contexteStats (non utilisé)
+ * RETOURNE : string — HTML de l'onglet
+ * MODIFIE : rien
+ */
+  function statsOffres(ctx) {
+    const toutes = donneesStats.offres;
+    const horsPoubelle = toutes.filter(o => !o.deleted_at);
+    const actives = horsPoubelle.filter(o => o.active);
+    const maintenant = new Date();
+    const dans30 = new Date(maintenant.getTime() + 30 * 86400000);
+
+    // Par catégorie
+    const lignesCategories = donneesStats.categories.map(c => {
+      // La rubrique « E-cartes cadeaux » affiche automatiquement toutes les offres marquées e-carte
+      const rubriqueEcartes = /e-?carte/i.test(c.label || '');
+      const offres = rubriqueEcartes ? horsPoubelle.filter(o => o.is_ecard || o.category_id === c.id) : horsPoubelle.filter(o => o.category_id === c.id);
+      return { c, rubriqueEcartes, actives: offres.filter(o => o.active).length, inactives: offres.filter(o => !o.active).length, ecartes: offres.filter(o => o.is_ecard).length };
+    }).sort((a, b) => b.actives - a.actives);
+
+    // Portée : nationale (ville vide), en ligne, locale (une ville ou un territoire)
+    const nationales = actives.filter(o => !(o.city || '').trim());
+    const enLigne = actives.filter(o => (o.city || '').trim().toLowerCase() === 'en ligne');
+    const locales = actives.filter(o => (o.city || '').trim() && (o.city || '').trim().toLowerCase() !== 'en ligne');
+    const parVille = new Map();
+    locales.forEach(o => { const v = o.city.trim(); parVille.set(v, (parVille.get(v) || 0) + 1); });
+
+    const finissent = actives.filter(o => o.expires_at && new Date(o.expires_at) >= maintenant && new Date(o.expires_at) <= dans30)
+      .sort((a, b) => new Date(a.expires_at) - new Date(b.expires_at));
+    const sansReduction = actives.filter(o => !(o.discount || '').trim());
+    const sansImage = actives.filter(o => !o.image_url);
+    const nomOffre = o => echapperHtml(o.partner_name || o.title || '');
+
+    return `
+      <div class="stats-grid">
+        ${carteStat(actives.length, 'Offres actives', 'ok')}
+        ${carteStat(horsPoubelle.length - actives.length, 'Offres inactives', 'orange')}
+        ${carteStat(toutes.length - horsPoubelle.length, 'Dans la poubelle')}
+        ${carteStat(actives.filter(o => o.is_ecard).length, 'E-cartes et bons d\'achat', 'orange')}
+      </div>
+      <div class="deux-colonnes">
+        <div class="bloc-stats">
+          <h3>Offres actives par catégorie</h3>
+          ${barresHorizontales(lignesCategories.filter(l => !l.rubriqueEcartes).map(l => ({ nom: `${l.c.icon || ''} ${l.c.label}${l.rubriqueEcartes ? ' (auto)' : ''}`.trim(), valeur: l.actives })))}
+        </div>
+        <div class="bloc-stats">
+          <h3>Portée des offres actives</h3>
+          ${barresHorizontales([
+            { nom: '🇫🇷 Nationales', valeur: nationales.length },
+            { nom: '🌐 En ligne', valeur: enLigne.length },
+            { nom: '📍 Locales', valeur: locales.length },
+          ])}
+          <h3 style="margin-top:16px;">Offres locales par ville</h3>
+          ${barresHorizontales([...parVille.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([v, n]) => ({ nom: v, valeur: n })))}
+        </div>
+      </div>
+      ${tableauStats('Offres par catégorie', ['Catégorie', 'Actives', 'Inactives', 'E-cartes'],
+        lignesCategories.map(l => [echapperHtml(`${l.c.icon || ''} ${l.c.label}${l.rubriqueEcartes ? ' (toutes les e-cartes)' : ''}`.trim()), String(l.actives), String(l.inactives), String(l.ecartes)]))}
+      ${tableauStats('Offres qui se terminent dans les 30 jours', ['Offre', 'Fin'], finissent.map(o => [nomOffre(o), formaterDateHeure(o.expires_at).split(' ')[0]]))}
+      ${tableauStats('Offres actives sans réduction affichée', ['Offre', 'Ville'], sansReduction.map(o => [nomOffre(o), echapperHtml(o.city || '—')]))}
+      ${sansImage.length ? tableauStats('Offres actives sans image', ['Offre'], sansImage.map(o => [nomOffre(o)])) : ''}
+      <div class="bloc-stats">
+        <h3>🔜 Bientôt</h3>
+        <p class="aide" style="margin-top:0;">Offres les plus consultées, clics vers les partenaires, recherches des utilisateurs et répartition par ville :
+        ces compteurs anonymes arriveront avec une prochaine version de l'application.</p>
+      </div>`;
+  }
+
+  /**
+ * FONCTION : statsVersions
+ * DESCRIPTION : Onglet « Versions » : version et type de téléphone de chaque compte (dernière ouverture)
+ * PARAMÈTRES :
+ *   - ctx (object) : contexte renvoyé par contexteStats
+ * RETOURNE : string — HTML de l'onglet
+ * MODIFIE : rien
+ */
+  function statsVersions(ctx) {
+    const versionsVues = ctx.profils.map(p => p.derniere_version).filter(Boolean);
+    // Référence = la plus récente entre la version réglée dans Paramètres et les versions vues sur les téléphones
+    const reference = [donneesStats.versions?.derniere_version, ...versionsVues].filter(Boolean).sort(comparerVersions).pop() || null;
+    const ouverts = ctx.profils.filter(p => p.derniere_version);
+    const aJour = ouverts.filter(p => !reference || comparerVersions(p.derniere_version, reference) >= 0);
+    const enRetard = ouverts.filter(p => reference && comparerVersions(p.derniere_version, reference) < 0);
+
+    const parVersion = new Map();
+    ouverts.forEach(p => parVersion.set(p.derniere_version, (parVersion.get(p.derniere_version) || 0) + 1));
+    const plateformes = { android: 'Android', ios: 'iPhone', web: 'Web' };
+    const parPlateforme = new Map();
+    ouverts.forEach(p => { const n = plateformes[p.derniere_plateforme] || p.derniere_plateforme || 'Inconnue'; parPlateforme.set(n, (parPlateforme.get(n) || 0) + 1); });
+
+    return `
+      <div class="stats-grid">
+        ${carteStat(reference ? 'v' + echapperHtml(reference) : '—', 'Version la plus récente')}
+        ${carteStat(aJour.length, 'Comptes à jour', 'ok')}
+        ${carteStat(enRetard.length, 'Comptes sur une ancienne version', 'orange')}
+        ${carteStat(ctx.profils.length - ouverts.length, 'Appli jamais ouverte')}
+      </div>
+      <div class="deux-colonnes">
+        <div class="bloc-stats">
+          <h3>Comptes par version</h3>
+          ${barresHorizontales([...parVersion.entries()].sort((a, b) => comparerVersions(b[0], a[0])).map(([v, n]) => ({ nom: 'v' + v + (v === reference ? ' (actuelle)' : ''), valeur: n })))}
+        </div>
+        <div class="bloc-stats">
+          <h3>Comptes par type de téléphone</h3>
+          ${barresHorizontales([...parPlateforme.entries()].map(([v, n]) => ({ nom: v, valeur: n })))}
+        </div>
+      </div>
+      ${tableauStats('Comptes à relancer pour la mise à jour', ['Utilisateur', 'Version', 'Téléphone', 'Dernière connexion'],
+        enRetard.map(p => [nomProfil(p), 'v' + echapperHtml(p.derniere_version), echapperHtml(plateformes[p.derniere_plateforme] || p.derniere_plateforme || '—'), formaterDateHeure(p.derniere_connexion)]))}
+      <p class="aide">Version et téléphone relevés à la dernière ouverture de l'appli. La version la plus récente est la plus haute entre
+      celle réglée dans Paramètres › Versions de l'application${donneesStats.versions?.derniere_version ? ` (actuellement v${echapperHtml(donneesStats.versions.derniere_version)})` : ''} et celles vues sur les téléphones.</p>`;
+  }
+
+  /**
+ * FONCTION : changerDebutTest
+ * DESCRIPTION : Change la date de début du test fermé et la mémorise dans le navigateur
+ * PARAMÈTRES :
+ *   - valeur (string) : date « AAAA-MM-JJ »
+ * RETOURNE : rien
+ * MODIFIE : localStorage[CLE_DEBUT_TEST], #stats-contenu
+ */
+  function changerDebutTest(valeur) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(valeur)) return;
+    try { localStorage.setItem(CLE_DEBUT_TEST, valeur); } catch (e) {}
+    afficherStats();
+  }
+
+  /**
+ * FONCTION : statsTestPlay
+ * DESCRIPTION : Onglet « Test Google Play » : une ligne par compte, une case par jour des 14 jours
+ *               du test fermé, verte si le compte a ouvert l'appli ce jour-là.
+ *               Ne dépend pas de la période choisie en haut.
+ * PARAMÈTRES :
+ *   - ctx (object) : contexte renvoyé par contexteStats
+ * RETOURNE : string — HTML de l'onglet
+ * MODIFIE : rien
+ */
+  function statsTestPlay(ctx) {
+    let debutTexte = DEBUT_TEST_PAR_DEFAUT;
+    try { debutTexte = localStorage.getItem(CLE_DEBUT_TEST) || DEBUT_TEST_PAR_DEFAUT; } catch (e) {}
+    const [a, m, j] = debutTexte.split('-').map(Number);
+    const debut = new Date(a, m - 1, j);
+    const jours = Array.from({ length: DUREE_TEST_JOURS }, (_, i) => { const d = new Date(debut); d.setDate(d.getDate() + i); return d; });
+    const aujourdhui = cleJour(new Date());
+    const numeroJour = Math.min(DUREE_TEST_JOURS, Math.max(0, Math.round((debutJour(new Date()) - debut) / 86400000) + 1));
+
+    // Jours d'activité de chaque compte
+    const activite = new Map();
+    ctx.toutesConnexions.forEach(c => {
+      if (c.evenement === 'deconnexion') return;
+      const s = activite.get(c.user_id) || new Set();
+      s.add(cleJour(c.created_at));
+      activite.set(c.user_id, s);
+    });
+    const comptes = ctx.profils.filter(p => p.actif).map(p => {
+      const s = activite.get(p.id) || new Set();
+      return { p, s, total: jours.filter(d => s.has(cleJour(d))).length };
+    }).sort((x, y) => y.total - x.total);
+    const actifsTest = comptes.filter(c => c.total > 0).length;
+    const actifsAujourdhui = comptes.filter(c => c.s.has(aujourdhui)).length;
+
+    const entete = jours.map((d, i) => `<th title="${d.toLocaleDateString('fr-FR')}">J${i + 1}<br><span style="font-weight:400;font-size:10px;">${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}</span></th>`).join('');
+    const lignes = comptes.map(({ p, s, total }) => `<tr>
+      <td>${nomProfil(p)}</td>
+      ${jours.map(d => {
+        const k = cleJour(d);
+        const classe = k > aujourdhui ? 'futur' : (s.has(k) ? 'ok' : '');
+        return `<td><span class="case-jour ${classe} ${k === aujourdhui ? 'aujourdhui' : ''}" title="${d.toLocaleDateString('fr-FR')}${s.has(k) ? ' : appli ouverte' : ''}"></span></td>`;
+      }).join('')}
+      <td><strong>${total}</strong> j sur ${DUREE_TEST_JOURS}</td>
+    </tr>`).join('');
+
+    return `
+      <div class="bloc-stats" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <label for="stats-debut-test" style="font-size:14px;font-weight:600;">Début du test fermé :</label>
+        <input type="date" id="stats-debut-test" value="${debutTexte}" onchange="changerDebutTest(this.value)" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;">
+        <span class="badge ${numeroJour >= DUREE_TEST_JOURS ? 'badge-green' : 'badge-orange'}" style="font-size:13px;">
+          ${numeroJour >= DUREE_TEST_JOURS ? '✅ 14 jours écoulés' : `Jour ${numeroJour} sur ${DUREE_TEST_JOURS}`}
+        </span>
+      </div>
+      <div class="stats-grid">
+        ${carteStat(comptes.length, 'Comptes activés')}
+        ${carteStat(actifsTest, 'Ont ouvert l\'appli pendant le test', 'ok')}
+        ${carteStat(actifsAujourdhui, 'Actifs aujourd\'hui', 'orange')}
+        ${carteStat(Math.max(0, 12 - actifsTest), 'Manquent pour atteindre 12')}
+      </div>
+      <div class="table-wrapper" style="overflow-x:auto;margin-bottom:12px;">
+        <table class="grille-test" data-titre="Test Google Play - activité sur 14 jours">
+          <thead><tr><th>Testeur</th>${entete}<th>Jours</th></tr></thead>
+          <tbody>${lignes || `<tr><td colspan="${DUREE_TEST_JOURS + 2}" style="text-align:center;color:#9CA3AF;">Aucun compte</td></tr>`}</tbody>
+        </table>
+      </div>
+      <p class="aide">🟩 appli ouverte ce jour-là · ⬜ pas d'ouverture · case encadrée en orange = aujourd'hui.<br>
+      Attention : Google compte les testeurs <strong>inscrits</strong> au test dans la Play Console, pas l'utilisation.
+      Ce tableau sert à repérer ceux qui n'ont pas encore installé ou ouvert l'appli, pour les relancer.</p>`;
+  }
+
+  /**
+ * FONCTION : exporterStatsCsv
+ * DESCRIPTION : Télécharge les tableaux de l'onglet affiché dans un fichier CSV lisible dans Excel
+ *               (séparateur point-virgule, encodage UTF-8 avec BOM pour les accents)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : rien (déclenche un téléchargement dans le navigateur)
+ */
+  function exporterStatsCsv() {
+    const tableaux = document.querySelectorAll('#stats-contenu table');
+    if (!tableaux.length) { showAlert('❌ Aucun tableau à exporter dans cet onglet', 'error', 4000); return; }
+    const cellule = el => {
+      // Les cases du test Google Play deviennent « X » (appli ouverte) ou vide
+      const caseJour = el.querySelector('.case-jour');
+      const texte = caseJour ? (caseJour.classList.contains('ok') ? 'X' : '') : el.innerText.replace(/\s+/g, ' ').trim();
+      return `"${texte.replace(/"/g, '""')}"`;
+    };
+    const blocs = [...tableaux].map(t => {
+      const lignes = [...t.querySelectorAll('tr')].map(tr => [...tr.children].map(cellule).join(';'));
+      return [`"${(t.dataset.titre || '').replace(/"/g, '""')}"`, ...lignes].join('\r\n');
+    });
+    const periode = periodeStatsJours ? `${periodeStatsJours}-jours` : 'tout';
+    const contenu = '﻿' + `"Alliance Avantages - Statistiques (${ongletStats}, ${periode}) - ${new Date().toLocaleString('fr-FR')}"\r\n\r\n` + blocs.join('\r\n\r\n');
+    const lien = document.createElement('a');
+    lien.href = URL.createObjectURL(new Blob([contenu], { type: 'text/csv;charset=utf-8' }));
+    lien.download = `statistiques-${ongletStats}-${periode}-${cleJour(new Date())}.csv`;
+    document.body.appendChild(lien);
+    lien.click();
+    setTimeout(() => { URL.revokeObjectURL(lien.href); lien.remove(); }, 1000);
   }
 
   // ============================================================
