@@ -250,7 +250,6 @@
   <nav>
     <button class="active" onclick="showSection('dashboard', this)">📊 Tableau de bord</button>
     <button onclick="showSection('offers', this)">🏷️ Offres</button>
-    <button onclick="showSection('add-offer', this)">➕ Ajouter une offre</button>
     <button onclick="showSection('categories', this)">📂 Catégories</button>
     <button onclick="showSection('users', this)">👥 Utilisateurs</button>
     <button onclick="showSection('stats', this)">📈 Statistiques</button>
@@ -326,7 +325,7 @@
   <div id="section-offers" class="section">
   <div class="section-header">
     <h2>Gestion des offres</h2>
-    <button class="btn-primary" onclick="showSection('add-offer', this)">➕ Nouvelle offre</button>
+    <button class="btn-primary" onclick="ouvrirSousSectionOffres('add-offer')">➕ Nouvelle offre</button>
   </div>
 
   <!-- Barre de recherche et filtres -->
@@ -383,6 +382,7 @@
     <div id="section-add-offer" class="section">
       <div class="section-header">
         <h2>Ajouter une offre</h2>
+        <button class="btn-edit" style="padding:10px 18px;font-size:14px;" onclick="ouvrirSousSectionOffres('offers')">← Retour aux offres</button>
       </div>
       <div class="form-card">
         <h3>Informations de l'offre</h3>
@@ -1647,12 +1647,28 @@ function togglePassword() {
   // ============================================================
 
   /**
+ * FONCTION : ouvrirSousSectionOffres
+ * DESCRIPTION : Ouvre la liste des offres ou le formulaire « Ajouter une offre » en gardant
+ *               l'onglet « Offres » du menu en surbrillance (le formulaire n'a plus d'onglet à lui)
+ * PARAMÈTRES :
+ *   - name (string) : 'offers' ou 'add-offer'
+ * RETOURNE : rien
+ * MODIFIE : section affichée, bouton actif du menu
+ */
+  function ouvrirSousSectionOffres(name) {
+    const bouton = [...document.querySelectorAll('nav button')].find(b => b.textContent.includes('🏷️ Offres'));
+    showSection(name, bouton);
+    window.scrollTo(0, 0);
+  }
+
+  /**
  * FONCTION : showSection
  * DESCRIPTION : Affiche la section demandée et masque les autres
  *               Recharge les données de la section si nécessaire
  *               Masque le message d'alerte au changement de section
  * PARAMÈTRES :
  *   - name (string) : nom de la section (dashboard, stats, offers, add-offer, categories, trash, users, settings, logs)
+ *                     (add-offer s'ouvre depuis le bouton « Nouvelle offre » de la section Offres)
  *   - btn (HTMLElement) : le bouton cliqué, passé via this dans le HTML — permet de le marquer comme actif
  * RETOURNE : rien
  * MODIFIE : classes CSS des sections et boutons nav, masque #alert et les identifiants affichés,
