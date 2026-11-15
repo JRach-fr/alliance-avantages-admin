@@ -1693,6 +1693,9 @@ function togglePassword() {
       return;
     }
     const moi = sessionAdmin?.email;
+    // Version la plus récente utilisée par au moins un compte : sert de référence pour repérer
+    // les utilisateurs qui n'ont pas encore installé la dernière version
+    const versionRecente = allUsers.map(u => u.derniere_version).filter(Boolean).sort(comparerVersions).pop() || null;
     tbody.innerHTML = allUsers.map(u => {
       const nomComplet = [u.prenom, u.nom].filter(Boolean).join(' ');
       const estMoi = u.email === moi;
@@ -1706,7 +1709,7 @@ function togglePassword() {
             ? `<span style="color:#16A34A;">🛡️ Info lue le ${formaterDateHeure(u.information_lue_le).split(' ')[0]}</span>`
             : '<span style="color:#C2410C;">🛡️ Info non lue</span>'}</div></td>
         <td style="text-align:center;">${u.nb_connexions || 0}</td>
-        <td>${formaterDateHeure(u.derniere_connexion)}</td>
+        <td>${formaterDateHeure(u.derniere_connexion)}${afficherVersionUtilisateur(u, versionRecente)}</td>
         <td>${formaterDateHeure(u.created_at)}</td>
         <td style="white-space:nowrap;">
           <button class="btn-edit" onclick="ouvrirFicheUtilisateur('${u.id}')" title="Modifier les informations">✏️</button>
@@ -1827,6 +1830,47 @@ function togglePassword() {
     afficherIdentifiants(`✅ Compte créé pour ${prenom} ${nom.toUpperCase()}`, res.email, res.motDePasse);
     addLog('👤 Utilisateur créé', `${prenom} ${nom.toUpperCase()} (${res.email}) — matricule ${matricule}${ville ? ' — ' + ville : ''}`);
     loadUsers();
+  }
+
+  /**
+ * FONCTION : comparerVersions
+ * DESCRIPTION : Compare deux numéros de version de l'appli (ex. « 1.1.0 » et « 1.10.2 »),
+ *               chiffre par chiffre, pour les trier du plus ancien au plus récent
+ * PARAMÈTRES :
+ *   - a (string) : première version
+ *   - b (string) : seconde version
+ * RETOURNE : number — négatif si a est plus ancienne, positif si a est plus récente, 0 si égales
+ * MODIFIE : rien
+ */
+  function comparerVersions(a, b) {
+    const pa = String(a).split('.').map(n => parseInt(n, 10) || 0);
+    const pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const d = (pa[i] || 0) - (pb[i] || 0);
+      if (d !== 0) return d;
+    }
+    return 0;
+  }
+
+  /**
+ * FONCTION : afficherVersionUtilisateur
+ * DESCRIPTION : Petite ligne sous la date de dernière connexion : version de l'appli et type de
+ *               téléphone lors de la dernière ouverture. En vert si c'est la version la plus récente,
+ *               en orange sinon (utilisateur à relancer pour qu'il installe la nouvelle version).
+ * PARAMÈTRES :
+ *   - u (object) : profil (derniere_version, derniere_plateforme)
+ *   - versionRecente (string|null) : version la plus récente parmi tous les comptes
+ * RETOURNE : string — HTML à ajouter dans la cellule (vide si l'appli n'a jamais été ouverte)
+ * MODIFIE : rien
+ */
+  function afficherVersionUtilisateur(u, versionRecente) {
+    if (!u.derniere_version) return '<div style="font-size:11px;margin-top:4px;color:#9CA3AF;">📱 jamais ouverte</div>';
+    const plateformes = { android: 'Android', ios: 'iPhone', web: 'Web' };
+    const plateforme = plateformes[u.derniere_plateforme] || (u.derniere_plateforme || '');
+    const aJour = !versionRecente || comparerVersions(u.derniere_version, versionRecente) >= 0;
+    const couleur = aJour ? '#16A34A' : '#FF6B00';
+    const info = aJour ? 'Dernière version installée' : `Ancienne version : la plus récente est la ${versionRecente}`;
+    return `<div style="font-size:11px;margin-top:4px;white-space:nowrap;color:${couleur};" title="${echapperHtml(info)}">📱 v${echapperHtml(u.derniere_version)}${plateforme ? ' · ' + echapperHtml(plateforme) : ''}</div>`;
   }
 
   /**
