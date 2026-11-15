@@ -249,11 +249,11 @@
 
   <nav>
     <button class="active" onclick="showSection('dashboard', this)">📊 Tableau de bord</button>
-    <button onclick="showSection('stats', this)">📈 Statistiques</button>
     <button onclick="showSection('offers', this)">🏷️ Offres</button>
     <button onclick="showSection('add-offer', this)">➕ Ajouter une offre</button>
     <button onclick="showSection('categories', this)">📂 Catégories</button>
     <button onclick="showSection('users', this)">👥 Utilisateurs</button>
+    <button onclick="showSection('stats', this)">📈 Statistiques</button>
     <button onclick="showSection('settings', this)">⚙️ Paramètres</button>
     <button onclick="showSection('logs', this)">📋 Journal</button>
     <button onclick="showSection('trash', this)">🗑️ Poubelle</button>
@@ -869,38 +869,27 @@
     </div>
   </div>
 
-  <!-- Versions de l'application (table versions_appli de Supabase, lue par l'appli au démarrage) -->
+  <!-- Version de l'application (table versions_appli de Supabase, lue par l'appli au démarrage) -->
   <div class="form-card" style="border-bottom-color:#003189;" id="carte-versions">
-    <h3>📲 Versions de l'application</h3>
+    <h3>📲 Version de l'application</h3>
     <p style="color:#6B7280;font-size:13px;margin-bottom:12px;">
-      À chaque démarrage, l'application compare son numéro interne à ces réglages.
-      <b>En dessous du « dernier APK »</b> : fenêtre « Nouvelle version disponible » avec Télécharger / Plus tard (revient 3 jours après).
-      <b>En dessous du « minimum accepté »</b> : écran bloquant, l'appli ne s'ouvre plus sans mise à jour — à réserver aux vrais problèmes.<br>
+      Indiquez la dernière version publiée sur le Play Store. À chaque démarrage, l'application compare sa propre version à celle-ci :
+      si elle est plus ancienne, une fenêtre propose « Mettre à jour » (ouvre le Play Store) ou « Plus tard » (revient 3 jours après).<br>
       Les mises à jour envoyées par Internet (<code>eas update</code>) ne passent pas par ici : elles arrivent toutes seules.
     </p>
     <div class="form-grid">
       <div class="form-group">
-        <label>Dernière version (affichée)</label>
-        <input type="text" id="version-derniere" placeholder="Ex : 1.1" maxlength="20">
+        <label>Dernière version disponible</label>
+        <input type="text" id="version-derniere" placeholder="Ex : 1.2.0" maxlength="20">
       </div>
-      <div class="form-group">
-        <label>Numéro interne du dernier APK (versionCode)</label>
-        <input type="number" id="version-derniere-code" min="1" max="9999" placeholder="Ex : 2">
-      </div>
-      <div class="form-group">
-        <label>Numéro interne minimum accepté</label>
-        <input type="number" id="version-min-code" min="1" max="9999" placeholder="Ex : 1">
-      </div>
-      <div class="form-group">
-        <label>Lien de téléchargement de l'APK</label>
-        <input type="url" id="version-lien" placeholder="https://expo.dev/... (lien de l'APK)">
-      </div>
-      <div class="form-group" style="grid-column:1/-1;">
-        <label>Message affiché dans la fenêtre (facultatif)</label>
-        <input type="text" id="version-message" maxlength="300" placeholder="Ex : Nouvel accueil et corrections des bugs signalés">
+      <div class="form-group" style="justify-content:flex-end;">
+        <label class="toggle-item" style="text-transform:none;letter-spacing:0;font-size:14px;color:#14213D;font-weight:500;">
+          <input type="checkbox" id="version-obligatoire">
+          Mise à jour obligatoire (l'appli se bloque tant qu'elle n'est pas faite)
+        </label>
       </div>
     </div>
-    <p id="version-etat" style="font-size:13px;color:#3A4560;margin:4px 0 8px;"></p>
+    <p id="version-etat" style="font-size:13px;color:#3A4560;margin:12px 0 8px;"></p>
     <div class="form-actions">
       <button class="btn-primary" onclick="enregistrerVersionsAppli()">💾 Sauvegarder</button>
     </div>
@@ -2848,65 +2837,53 @@ function togglePassword() {
   /**
  * FONCTION : decrireEtatVersions
  * DESCRIPTION : Résume en une phrase ce que verront les utilisateurs avec ces réglages
- * PARAMÈTRES : v — objet { derniere_version, derniere_version_code, version_min_code, lien_apk }
+ * PARAMÈTRES : v — objet { derniere_version, mise_a_jour_obligatoire }
  * RETOURNE : string — phrase à afficher sous le formulaire
  * MODIFIE : rien
  */
   function decrireEtatVersions(v) {
-    if (v.derniere_version_code <= 1) return 'Aucune nouvelle version proposée pour l\'instant.';
-    let texte = `Les téléphones avec un APK de numéro inférieur à ${v.derniere_version_code} se verront proposer la version ${v.derniere_version}.`;
-    if (v.version_min_code > 1) texte += ` En dessous de ${v.version_min_code}, la mise à jour est obligatoire.`;
-    else texte += ' Aucune mise à jour obligatoire.';
-    if (!v.lien_apk) texte += ' ⚠️ Pas de lien : la fenêtre n\'aura pas de bouton Télécharger.';
-    return texte;
+    if (!v || !v.derniere_version) return 'Aucune version indiquée : aucune fenêtre de mise à jour ne s\'affiche.';
+    return v.mise_a_jour_obligatoire
+      ? `🔒 Les téléphones avec une version plus ancienne que la ${v.derniere_version} sont bloqués tant qu'ils n'ont pas fait la mise à jour.`
+      : `Les téléphones avec une version plus ancienne que la ${v.derniere_version} se voient proposer la mise à jour (non obligatoire).`;
   }
 
   /**
  * FONCTION : chargerVersionsAppli
- * DESCRIPTION : Lit la table versions_appli et remplit la carte « Versions de l'application »
+ * DESCRIPTION : Lit la table versions_appli et remplit la carte « Version de l'application »
  * PARAMÈTRES : aucun
  * RETOURNE : Promise<void>
- * MODIFIE : versionsAppli, champs #version-*, texte #version-etat
+ * MODIFIE : versionsAppli, champs #version-derniere et #version-obligatoire, texte #version-etat
  */
   async function chargerVersionsAppli() {
     try {
-      const lignes = await supabaseQuery('versions_appli', { select: 'derniere_version,derniere_version_code,version_min_code,lien_apk,message', filter: 'id=eq.1' });
+      const lignes = await supabaseQuery('versions_appli', { select: 'derniere_version,mise_a_jour_obligatoire', filter: 'id=eq.1' });
       if (!Array.isArray(lignes) || !lignes[0]) return;
       versionsAppli = lignes[0];
     } catch (e) { return; }
     document.getElementById('version-derniere').value = versionsAppli.derniere_version || '';
-    document.getElementById('version-derniere-code').value = versionsAppli.derniere_version_code;
-    document.getElementById('version-min-code').value = versionsAppli.version_min_code;
-    document.getElementById('version-lien').value = versionsAppli.lien_apk || '';
-    document.getElementById('version-message').value = versionsAppli.message || '';
+    document.getElementById('version-obligatoire').checked = versionsAppli.mise_a_jour_obligatoire === true;
     document.getElementById('version-etat').textContent = decrireEtatVersions(versionsAppli);
   }
 
   /**
  * FONCTION : enregistrerVersionsAppli
- * DESCRIPTION : Vérifie puis enregistre les réglages de version ; demande confirmation
- *               avant de rendre une mise à jour obligatoire, et note le changement au journal
- * PARAMÈTRES : aucun (lit les champs #version-*)
+ * DESCRIPTION : Vérifie puis enregistre la dernière version disponible et le caractère obligatoire ;
+ *               demande confirmation avant de rendre une mise à jour obligatoire, et note le changement au journal
+ * PARAMÈTRES : aucun (lit #version-derniere et #version-obligatoire)
  * RETOURNE : Promise<void>
  * MODIFIE : table versions_appli, versionsAppli, journal (logs)
  */
   async function enregistrerVersionsAppli() {
     const nouveau = {
       derniere_version: document.getElementById('version-derniere').value.trim(),
-      derniere_version_code: parseInt(document.getElementById('version-derniere-code').value, 10),
-      version_min_code: parseInt(document.getElementById('version-min-code').value, 10),
-      lien_apk: document.getElementById('version-lien').value.trim() || null,
-      message: document.getElementById('version-message').value.trim() || null
+      mise_a_jour_obligatoire: document.getElementById('version-obligatoire').checked
     };
-    if (!/^\d+\.\d+(\.\d+)?$/.test(nouveau.derniere_version)) { showAlert('❌ Dernière version : format attendu 1.1 ou 1.1.2', 'error', 0); return; }
-    if (!nouveau.derniere_version_code || nouveau.derniere_version_code < 1) { showAlert('❌ Numéro interne du dernier APK invalide', 'error', 0); return; }
-    if (!nouveau.version_min_code || nouveau.version_min_code < 1) { showAlert('❌ Numéro minimum invalide', 'error', 0); return; }
-    if (nouveau.version_min_code > nouveau.derniere_version_code) { showAlert('❌ Le minimum ne peut pas dépasser le numéro du dernier APK', 'error', 0); return; }
-    if (nouveau.lien_apk && !/^https:\/\//.test(nouveau.lien_apk)) { showAlert('❌ Le lien doit commencer par https://', 'error', 0); return; }
-    const ancienMin = versionsAppli ? versionsAppli.version_min_code : 1;
-    if (nouveau.version_min_code > ancienMin) {
-      if (!nouveau.lien_apk) { showAlert('❌ Une mise à jour obligatoire demande un lien de téléchargement', 'error', 0); return; }
-      if (!confirm(`⚠️ Mise à jour OBLIGATOIRE\n\nLes téléphones avec un APK de numéro inférieur à ${nouveau.version_min_code} ne pourront plus ouvrir l'application tant qu'ils n'auront pas installé la version ${nouveau.derniere_version}.\n\nContinuer ?`)) return;
+    if (!/^\d+\.\d+(\.\d+)?$/.test(nouveau.derniere_version)) { showAlert('❌ Dernière version : format attendu 1.2 ou 1.2.0', 'error', 0); return; }
+    if (versionsAppli?.derniere_version && comparerVersions(nouveau.derniere_version, versionsAppli.derniere_version) < 0
+        && !confirm(`La version ${nouveau.derniere_version} est plus ancienne que celle enregistrée (${versionsAppli.derniere_version}).\n\nContinuer quand même ?`)) return;
+    if (nouveau.mise_a_jour_obligatoire && !(versionsAppli?.mise_a_jour_obligatoire && versionsAppli?.derniere_version === nouveau.derniere_version)) {
+      if (!confirm(`⚠️ Mise à jour OBLIGATOIRE\n\nLes téléphones avec une version plus ancienne que la ${nouveau.derniere_version} ne pourront plus ouvrir l'application tant qu'ils n'auront pas fait la mise à jour sur le Play Store.\n\nVérifiez que la ${nouveau.derniere_version} est bien disponible sur le Play Store.\n\nContinuer ?`)) return;
     }
     const res = await fetch(`${SUPABASE_URL}/rest/v1/versions_appli?id=eq.1`, {
       method: 'PATCH',
@@ -2921,11 +2898,9 @@ function togglePassword() {
     if (!res.ok) { showAlert('❌ Enregistrement impossible', 'error', 0); return; }
     const avant = versionsAppli;
     await chargerVersionsAppli();
-    showAlert('✅ Versions enregistrées', 'success', 0);
-    const detail = avant
-      ? `dernière ${avant.derniere_version} (n° ${avant.derniere_version_code}) → ${nouveau.derniere_version} (n° ${nouveau.derniere_version_code}), minimum ${avant.version_min_code} → ${nouveau.version_min_code}`
-      : `dernière ${nouveau.derniere_version} (n° ${nouveau.derniere_version_code}), minimum ${nouveau.version_min_code}`;
-    addLog('📲 Versions de l\'appli modifiées', detail);
+    showAlert('✅ Version enregistrée', 'success', 0);
+    const libelle = v => `${v.derniere_version || '—'}${v.mise_a_jour_obligatoire ? ' (obligatoire)' : ''}`;
+    addLog('📲 Version de l\'appli modifiée', avant ? `${libelle(avant)} → ${libelle(nouveau)}` : libelle(nouveau));
   }
 
   /**
