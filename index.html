@@ -1233,6 +1233,52 @@
   </div>
 </div>
 
+<!-- MODAL DROITS ADMINISTRATEUR -->
+<!--
+  COMPOSANT  : Droits administrateur
+  DESCRIPTION : Donner ou retirer les droits administrateur à un compte, en deux étapes :
+                1. message d'avertissement + case « je comprends » → un code à 6 chiffres est envoyé
+                   sur l'adresse e-mail de l'administrateur connecté ;
+                2. saisie du code (valable 10 minutes, 5 essais) → droits changés, action notée au journal.
+-->
+<div class="modal-overlay" id="admin-role-modal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 id="admin-role-titre">🛡️ Droits administrateur</h3>
+      <button class="modal-close" onclick="fermerDroitsAdmin()">×</button>
+    </div>
+    <input type="hidden" id="admin-role-id">
+    <input type="hidden" id="admin-role-operation">
+    <!-- Étape 1 : avertissement -->
+    <div id="admin-role-etape1">
+      <div id="admin-role-avertissement" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.6;color:#7F1D1D;"></div>
+      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:14px;cursor:pointer;">
+        <input type="checkbox" id="admin-role-compris" style="width:18px;height:18px;margin-top:2px;" onchange="document.getElementById('admin-role-envoyer').disabled = !this.checked">
+        <span id="admin-role-compris-texte"></span>
+      </label>
+      <div style="display:flex;gap:10px;margin-top:18px;">
+        <button class="btn-primary" id="admin-role-envoyer" disabled onclick="envoyerCodeAdmin()">📧 M'envoyer le code de confirmation</button>
+        <button class="btn-danger" style="padding:10px 16px;font-size:14px;" onclick="fermerDroitsAdmin()">Annuler</button>
+      </div>
+    </div>
+    <!-- Étape 2 : saisie du code -->
+    <div id="admin-role-etape2" style="display:none;">
+      <p id="admin-role-info-code" style="font-size:14px;line-height:1.6;margin-bottom:12px;"></p>
+      <div class="form-group">
+        <label>Code reçu par e-mail (6 chiffres)</label>
+        <input type="text" id="admin-role-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••"
+          style="font-size:24px;letter-spacing:8px;text-align:center;font-family:monospace;"
+          onkeydown="if (event.key === 'Enter') confirmerCodeAdmin()">
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+        <button class="btn-primary" id="admin-role-confirmer" onclick="confirmerCodeAdmin()">✅ Confirmer</button>
+        <button class="btn-edit" style="padding:10px 14px;" onclick="envoyerCodeAdmin()">↻ Renvoyer un code</button>
+        <button class="btn-danger" style="padding:10px 16px;font-size:14px;" onclick="fermerDroitsAdmin()">Annuler</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL APERÇU OFFRE MOBILE -->
 <!--
   COMPOSANT  : Modal aperçu mobile
@@ -2462,6 +2508,9 @@ function togglePassword() {
     }
   }
 
+  /** Identifiants des comptes administrateurs (lus par la fonction serveur, pour le badge 🛡️) */
+  let idsAdmins = [];
+
   /** Demandes « Supprimer mon compte » non traitées : [{ id, user_id, created_at }] */
   let demandesSuppression = [];
   /** Nombre de comptes activés (affiché en haut de page), null tant qu'il n'est pas connu */
@@ -2584,13 +2633,15 @@ function togglePassword() {
  *               remplit la liste des villes du filtre, puis affiche le tableau
  * PARAMÈTRES : aucun
  * RETOURNE : Promise<void>
- * MODIFIE : allUsers, demandesSuppression, nbUtilisateursActives, #filtre-users-ville, #users-count, #users-table
+ * MODIFIE : allUsers, idsAdmins, demandesSuppression, nbUtilisateursActives, #filtre-users-ville, #users-count, #users-table
  */
   async function loadUsers() {
-    const [data] = await Promise.all([
+    const [data, admins] = await Promise.all([
       supabaseQuery('profils', { select: '*', order: 'created_at.desc' }),
+      appelGestionUtilisateurs({ action: 'lister_admins' }),
       chargerDemandesSuppression(),
     ]);
+    idsAdmins = Array.isArray(admins?.ids) ? admins.ids : [];
     allUsers = Array.isArray(data) ? data : [];
     const actifs = allUsers.filter(u => u.actif).length;
     nbUtilisateursActives = actifs;
@@ -2693,6 +2744,7 @@ function togglePassword() {
   function ligneUtilisateur(u, raisons, versionRecente) {
     const nomComplet = [u.prenom, u.nom].filter(Boolean).join(' ');
     const estMoi = u.email === sessionAdmin?.email;
+    const estAdminCompte = idsAdmins.includes(u.id);
     const demande = raisons.find(r => r.demande)?.demande;
     const fond = demande ? 'background:#FEF2F2;' : (raisons.length ? 'background:#FFF7ED;' : '');
     const opacite = u.actif || raisons.length ? '' : 'opacity:0.55;';
@@ -2712,7 +2764,7 @@ function togglePassword() {
           Rien à faire pour l'instant. S'il ne s'est toujours pas connecté le ${relance.toLocaleDateString('fr-FR')}, il passera « À traiter » (à relancer).</span></span></div>`;
     }
     return `<tr${style}>
-        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}${pastille}${pastilleAttente}</td>
+        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : (estAdminCompte ? ' <span class="badge badge-orange">🛡️ admin</span>' : '')}${pastille}${pastilleAttente}</td>
         <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
@@ -2730,6 +2782,7 @@ function togglePassword() {
             ${u.actif
               ? `<button class="btn-orange" style="padding:6px 10px;font-size:12px;" onclick="actionUtilisateur('${u.id}', 'desactiver')" title="Bloquer la connexion">⏸️ Désactiver</button>`
               : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
+            <button class="btn-edit" style="background:${estAdminCompte ? '#7C3AED' : '#4B5563'};" onclick="ouvrirDroitsAdmin('${u.id}')" title="${estAdminCompte ? 'Retirer les droits administrateur (confirmation par code e-mail)' : 'Donner les droits administrateur (confirmation par code e-mail)'}">🛡️</button>
             <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement (la demande de suppression disparaît avec le compte)">🗑️</button>`}
         </td>
       </tr>`;
@@ -3087,6 +3140,110 @@ function togglePassword() {
     if (action === 'reinitialiser_mdp') afficherIdentifiants(`🔑 Nouveau mot de passe pour ${qui}`, u.email, res.motDePasse, res.emailEnvoye === true);
     else if (action === 'supprimer') showAlert(res.emailEnvoye ? `✅ Compte supprimé — e-mail de confirmation envoyé à ${u.email}` : '✅ Compte supprimé — ⚠️ l\'e-mail de confirmation n\'a pas pu être envoyé', res.emailEnvoye ? 'success' : 'error', 6000);
     else showAlert('✅ ' + journal[action][0], 'success', 3000);
+    loadUsers();
+  }
+
+  /**
+ * FONCTION : ouvrirDroitsAdmin
+ * DESCRIPTION : Ouvre la fenêtre « Droits administrateur » pour un compte : message d'avertissement
+ *               clair (ce que les droits permettent) et case « je comprends » obligatoire
+ * PARAMÈTRES :
+ *   - id (string) : identifiant du compte
+ * RETOURNE : rien
+ * MODIFIE : contenu et affichage de #admin-role-modal
+ */
+  function ouvrirDroitsAdmin(id) {
+    const u = allUsers.find(x => x.id === id);
+    if (!u) return;
+    const qui = [u.prenom, u.nom].filter(Boolean).join(' ') || u.email;
+    const donner = !idsAdmins.includes(id);
+    document.getElementById('admin-role-id').value = id;
+    document.getElementById('admin-role-operation').value = donner ? 'donner' : 'retirer';
+    document.getElementById('admin-role-titre').textContent = donner ? '🛡️ Donner les droits administrateur' : '🛡️ Retirer les droits administrateur';
+    document.getElementById('admin-role-avertissement').innerHTML = donner
+      ? `<strong>⚠️ Attention : action sensible.</strong><br>
+         <strong>${echapperHtml(qui)}</strong> (${echapperHtml(u.email)}) aura <strong>exactement les mêmes droits que vous</strong> :
+         <ul style="margin:8px 0 0 18px;">
+           <li>créer, modifier et supprimer toutes les offres, catégories et bannières ;</li>
+           <li>voir les données personnelles de tous les utilisateurs (nom, e-mail, matricule, ville) ;</li>
+           <li>créer, désactiver et supprimer des comptes ;</li>
+           <li>donner ou retirer les droits administrateur à d'autres comptes.</li>
+         </ul>
+         <div style="margin-top:8px;">Ne le faites que pour une personne de confiance. Un code de confirmation va être envoyé sur <strong>votre</strong> adresse e-mail.</div>`
+      : `<strong>⚠️ Retrait des droits administrateur.</strong><br>
+         <strong>${echapperHtml(qui)}</strong> (${echapperHtml(u.email)}) n'aura plus accès à l'administration.
+         Son compte reste actif pour utiliser l'application normalement.
+         <div style="margin-top:8px;">Un code de confirmation va être envoyé sur <strong>votre</strong> adresse e-mail.</div>`;
+    document.getElementById('admin-role-compris-texte').textContent = donner
+      ? `Je comprends que ${qui} pourra tout faire dans l'administration.`
+      : `Je confirme vouloir retirer les droits administrateur de ${qui}.`;
+    document.getElementById('admin-role-compris').checked = false;
+    document.getElementById('admin-role-envoyer').disabled = true;
+    document.getElementById('admin-role-code').value = '';
+    document.getElementById('admin-role-etape1').style.display = 'block';
+    document.getElementById('admin-role-etape2').style.display = 'none';
+    document.getElementById('admin-role-modal').classList.add('open');
+  }
+
+  /**
+ * FONCTION : fermerDroitsAdmin
+ * DESCRIPTION : Ferme la fenêtre « Droits administrateur » sans rien changer
+ *               (un code déjà envoyé expire tout seul au bout de 10 minutes)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : affichage de #admin-role-modal
+ */
+  function fermerDroitsAdmin() {
+    document.getElementById('admin-role-modal').classList.remove('open');
+  }
+
+  /**
+ * FONCTION : envoyerCodeAdmin
+ * DESCRIPTION : Demande à la fonction serveur d'envoyer un code à 6 chiffres sur l'adresse e-mail
+ *               de l'administrateur connecté, puis affiche l'étape de saisie du code
+ * PARAMÈTRES : aucun (lit #admin-role-id et #admin-role-operation)
+ * RETOURNE : Promise<void>
+ * MODIFIE : affichage des étapes de #admin-role-modal
+ */
+  async function envoyerCodeAdmin() {
+    const id = document.getElementById('admin-role-id').value;
+    const operation = document.getElementById('admin-role-operation').value;
+    const bouton = document.getElementById('admin-role-envoyer');
+    bouton.disabled = true; bouton.textContent = '⏳ Envoi du code...';
+    const res = await appelGestionUtilisateurs({ action: 'demander_admin', id, operation });
+    bouton.disabled = false; bouton.textContent = "📧 M'envoyer le code de confirmation";
+    if (res.erreur) { showAlert('❌ ' + res.erreur, 'error', 6000); return; }
+    document.getElementById('admin-role-info-code').innerHTML =
+      `📧 Un code à 6 chiffres vient d'être envoyé à <strong>${echapperHtml(res.destinataire || '')}</strong>.<br>
+       Il est valable <strong>${Number(res.minutes) || 10} minutes</strong>. Pensez à regarder dans les courriers indésirables.`;
+    document.getElementById('admin-role-etape1').style.display = 'none';
+    document.getElementById('admin-role-etape2').style.display = 'block';
+    document.getElementById('admin-role-code').value = '';
+    document.getElementById('admin-role-code').focus();
+  }
+
+  /**
+ * FONCTION : confirmerCodeAdmin
+ * DESCRIPTION : Envoie le code saisi à la fonction serveur ; si le code est bon, les droits
+ *               administrateur sont donnés ou retirés (la fonction serveur note l'action au journal
+ *               et prévient la personne par e-mail), puis la liste est rechargée
+ * PARAMÈTRES : aucun (lit #admin-role-id et #admin-role-code)
+ * RETOURNE : Promise<void>
+ * MODIFIE : droits du compte (via la fonction serveur), affichage, liste des comptes
+ */
+  async function confirmerCodeAdmin() {
+    const id = document.getElementById('admin-role-id').value;
+    const code = document.getElementById('admin-role-code').value.replace(/\s+/g, '');
+    if (!/^[0-9]{6}$/.test(code)) { showAlert('❌ Le code doit contenir 6 chiffres', 'error', 4000); return; }
+    const bouton = document.getElementById('admin-role-confirmer');
+    bouton.disabled = true; bouton.textContent = '⏳ Vérification...';
+    const res = await appelGestionUtilisateurs({ action: 'confirmer_admin', id, code });
+    bouton.disabled = false; bouton.textContent = '✅ Confirmer';
+    if (res.erreur) { showAlert('❌ ' + res.erreur, 'error', 6000); return; }
+    fermerDroitsAdmin();
+    showAlert(res.operation === 'donner'
+      ? '✅ Droits administrateur donnés — la personne a été prévenue par e-mail (elle doit se reconnecter)'
+      : '✅ Droits administrateur retirés — effectif au plus tard dans 1 heure (ou à sa reconnexion)', 'success', 7000);
     loadUsers();
   }
 
