@@ -1237,8 +1237,9 @@
 <!--
   COMPOSANT  : Droits administrateur
   DESCRIPTION : Donner ou retirer les droits administrateur à un compte, en deux étapes :
+                RÉSERVÉ AU SUPER ADMINISTRATEUR (bouton 🛡️ visible pour lui seul, vérifié par le serveur)
                 1. message d'avertissement + case « je comprends » → un code à 6 chiffres est envoyé
-                   sur l'adresse e-mail de l'administrateur connecté ;
+                   sur l'adresse du super administrateur (jrach.dev@gmail.com) ;
                 2. saisie du code (valable 10 minutes, 5 essais) → droits changés, action notée au journal.
 -->
 <div class="modal-overlay" id="admin-role-modal">
@@ -2510,6 +2511,10 @@ function togglePassword() {
 
   /** Identifiants des comptes administrateurs (lus par la fonction serveur, pour le badge 🛡️) */
   let idsAdmins = [];
+  /** Identifiants des super administrateurs (badge 👑 : compte protégé, droits non modifiables) */
+  let idsSuperAdmins = [];
+  /** true si l'administrateur connecté est le super administrateur (seul à gérer les droits admin) */
+  let moiSuperAdmin = false;
 
   /** Demandes « Supprimer mon compte » non traitées : [{ id, user_id, created_at }] */
   let demandesSuppression = [];
@@ -2633,7 +2638,7 @@ function togglePassword() {
  *               remplit la liste des villes du filtre, puis affiche le tableau
  * PARAMÈTRES : aucun
  * RETOURNE : Promise<void>
- * MODIFIE : allUsers, idsAdmins, demandesSuppression, nbUtilisateursActives, #filtre-users-ville, #users-count, #users-table
+ * MODIFIE : allUsers, idsAdmins, idsSuperAdmins, moiSuperAdmin, demandesSuppression, nbUtilisateursActives, #filtre-users-ville, #users-count, #users-table
  */
   async function loadUsers() {
     const [data, admins] = await Promise.all([
@@ -2642,6 +2647,8 @@ function togglePassword() {
       chargerDemandesSuppression(),
     ]);
     idsAdmins = Array.isArray(admins?.ids) ? admins.ids : [];
+    idsSuperAdmins = Array.isArray(admins?.superAdmins) ? admins.superAdmins : [];
+    moiSuperAdmin = admins?.moiSuperAdmin === true;
     allUsers = Array.isArray(data) ? data : [];
     const actifs = allUsers.filter(u => u.actif).length;
     nbUtilisateursActives = actifs;
@@ -2745,6 +2752,7 @@ function togglePassword() {
     const nomComplet = [u.prenom, u.nom].filter(Boolean).join(' ');
     const estMoi = u.email === sessionAdmin?.email;
     const estAdminCompte = idsAdmins.includes(u.id);
+    const estSuperAdminCompte = idsSuperAdmins.includes(u.id);
     const demande = raisons.find(r => r.demande)?.demande;
     const fond = demande ? 'background:#FEF2F2;' : (raisons.length ? 'background:#FFF7ED;' : '');
     const opacite = u.actif || raisons.length ? '' : 'opacity:0.55;';
@@ -2764,7 +2772,7 @@ function togglePassword() {
           Rien à faire pour l'instant. S'il ne s'est toujours pas connecté le ${relance.toLocaleDateString('fr-FR')}, il passera « À traiter » (à relancer).</span></span></div>`;
     }
     return `<tr${style}>
-        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : (estAdminCompte ? ' <span class="badge badge-orange">🛡️ admin</span>' : '')}${pastille}${pastilleAttente}</td>
+        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ` <span class="badge badge-orange">vous · ${estSuperAdminCompte ? '👑 super admin' : 'admin'}</span>` : (estSuperAdminCompte ? ' <span class="badge badge-orange">👑 super admin</span>' : (estAdminCompte ? ' <span class="badge badge-orange">🛡️ admin</span>' : ''))}${pastille}${pastilleAttente}</td>
         <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
@@ -2777,12 +2785,12 @@ function togglePassword() {
         <td style="min-width:150px;line-height:2.2;">
           ${demande ? `<button class="btn-edit" style="background:#16A34A;margin-bottom:4px;" onclick="marquerDemandeTraitee(${Number(demande.id)}, '${u.id}')" title="La demande a été traitée autrement (demande de test, annulée par l'utilisateur...). Pour supprimer le compte, utiliser 🗑️">✓ Traitée</button><br>` : ''}
           <button class="btn-edit" onclick="ouvrirFicheUtilisateur('${u.id}')" title="Modifier les informations">✏️</button>
-          ${estMoi ? '' : `
+          ${estMoi || estSuperAdminCompte ? '' : `
             <button class="btn-edit" ${u.mdp_a_changer === true ? 'style="background:#FF6B00;"' : ''} onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')" title="${u.mdp_a_changer === true ? 'Mot de passe provisoire pas encore changé par l\'utilisateur — cliquer pour en créer un nouveau' : 'Nouveau mot de passe provisoire'}">🔑</button>
             ${u.actif
               ? `<button class="btn-orange" style="padding:6px 10px;font-size:12px;" onclick="actionUtilisateur('${u.id}', 'desactiver')" title="Bloquer la connexion">⏸️ Désactiver</button>`
               : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
-            <button class="btn-edit" style="background:${estAdminCompte ? '#7C3AED' : '#4B5563'};" onclick="ouvrirDroitsAdmin('${u.id}')" title="${estAdminCompte ? 'Retirer les droits administrateur (confirmation par code e-mail)' : 'Donner les droits administrateur (confirmation par code e-mail)'}">🛡️</button>
+            ${moiSuperAdmin ? `<button class="btn-edit" style="background:${estAdminCompte ? '#7C3AED' : '#4B5563'};" onclick="ouvrirDroitsAdmin('${u.id}')" title="${estAdminCompte ? 'Retirer les droits administrateur (confirmation par code e-mail)' : 'Donner les droits administrateur (confirmation par code e-mail)'}">🛡️</button>` : ''}
             <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement (la demande de suppression disparaît avec le compte)">🗑️</button>`}
         </td>
       </tr>`;
@@ -3154,7 +3162,7 @@ function togglePassword() {
  */
   function ouvrirDroitsAdmin(id) {
     const u = allUsers.find(x => x.id === id);
-    if (!u) return;
+    if (!u || !moiSuperAdmin || idsSuperAdmins.includes(id)) return;
     const qui = [u.prenom, u.nom].filter(Boolean).join(' ') || u.email;
     const donner = !idsAdmins.includes(id);
     document.getElementById('admin-role-id').value = id;
@@ -3169,11 +3177,11 @@ function togglePassword() {
            <li>créer, désactiver et supprimer des comptes ;</li>
            <li>donner ou retirer les droits administrateur à d'autres comptes.</li>
          </ul>
-         <div style="margin-top:8px;">Ne le faites que pour une personne de confiance. Un code de confirmation va être envoyé sur <strong>votre</strong> adresse e-mail.</div>`
+         <div style="margin-top:8px;">Ne le faites que pour une personne de confiance. Un code de confirmation va être envoyé sur l'adresse du super administrateur.</div>`
       : `<strong>⚠️ Retrait des droits administrateur.</strong><br>
          <strong>${echapperHtml(qui)}</strong> (${echapperHtml(u.email)}) n'aura plus accès à l'administration.
          Son compte reste actif pour utiliser l'application normalement.
-         <div style="margin-top:8px;">Un code de confirmation va être envoyé sur <strong>votre</strong> adresse e-mail.</div>`;
+         <div style="margin-top:8px;">Un code de confirmation va être envoyé sur l'adresse du super administrateur.</div>`;
     document.getElementById('admin-role-compris-texte').textContent = donner
       ? `Je comprends que ${qui} pourra tout faire dans l'administration.`
       : `Je confirme vouloir retirer les droits administrateur de ${qui}.`;
