@@ -290,6 +290,9 @@
         </div>
       </div>
 
+      <!-- Demandes de suppression de compte non traitées (délai de 30 jours promis dans la politique de confidentialité) -->
+      <div id="dashboard-suppressions" style="display:none;background:#FEF2F2;border:2px solid #DC2626;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
+
       <!-- Offres inactives (hors poubelle) : elles n'apparaissent pas dans l'application -->
       <div id="dashboard-inactives" style="display:none;background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 18px;margin-bottom:16px;font-size:14px;"></div>
 
@@ -663,7 +666,35 @@
     <div id="user-result" style="display:none;margin-top:14px;padding:14px;border-radius:10px;background:#ECFDF5;border:1px solid #6EE7B7;font-size:14px;"></div>
   </div>
 
-  <div class="table-wrapper">
+  <!-- Recherche et filtres des comptes (les comptes « à traiter » sont toujours affichés en premier) -->
+  <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+    <input type="text" id="search-users" placeholder="🔍 Rechercher : nom, prénom, e-mail, matricule, ville..." oninput="filtrerUtilisateurs()"
+      style="flex:1;padding:10px 14px;border:1px solid #003189;border-radius:8px;font-size:14px;min-width:220px;">
+    <select id="filtre-users-statut" onchange="filtrerUtilisateurs()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+      <option value="">Tous les comptes</option>
+      <option value="a-traiter">⚠️ À traiter</option>
+      <option value="actifs">Activés</option>
+      <option value="desactives">Désactivés</option>
+    </select>
+    <select id="filtre-users-ville" onchange="filtrerUtilisateurs()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+      <option value="">Toutes les villes</option>
+    </select>
+    <select id="filtre-users-activite" onchange="filtrerUtilisateurs()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+      <option value="">Toute activité</option>
+      <option value="actifs30">Connectés ces 30 derniers jours</option>
+      <option value="inactifs30">Inactifs depuis plus de 30 jours</option>
+      <option value="jamais">Jamais connectés</option>
+    </select>
+    <select id="filtre-users-version" onchange="filtrerUtilisateurs()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
+      <option value="">Toutes les versions</option>
+      <option value="a-jour">Version à jour</option>
+      <option value="ancienne">Ancienne version</option>
+    </select>
+    <button onclick="reinitialiserFiltresUtilisateurs()" style="background:#6B7280;color:white;border:none;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:14px;">✕ Réinitialiser</button>
+  </div>
+  <p id="users-search-count" style="font-size:13px;color:#6B7280;margin-bottom:12px;"></p>
+
+  <div class="table-wrapper" style="overflow-x:auto;">
     <table>
       <thead>
         <tr>
@@ -672,14 +703,12 @@
           <th>Ville</th>
           <th>Matricule</th>
           <th>Statut</th>
-          <th>Connexions</th>
           <th>Dernière connexion</th>
-          <th>Créé le</th>
           <th>Actions</th>
         </tr>
       </thead>
       <tbody id="users-table">
-        <tr><td colspan="9" class="loading">Chargement...</td></tr>
+        <tr><td colspan="7" class="loading">Chargement...</td></tr>
       </tbody>
     </table>
   </div>
@@ -2404,53 +2433,298 @@ function togglePassword() {
     }
   }
 
+  /** Demandes « Supprimer mon compte » non traitées : [{ id, user_id, created_at }] */
+  let demandesSuppression = [];
+  /** Nombre de comptes activés (affiché en haut de page), null tant qu'il n'est pas connu */
+  let nbUtilisateursActives = null;
+  /** Délai promis dans la politique de confidentialité pour supprimer un compte */
+  const DELAI_SUPPRESSION_JOURS = 30;
+  /** Au-delà de ce délai sans aucune connexion, un compte créé est « à relancer » */
+  const DELAI_RELANCE_JOURS = 7;
+
+  /**
+ * FONCTION : majEnTete
+ * DESCRIPTION : Met à jour le résumé en haut de page : offres, catégories et utilisateurs activés
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : #header-info
+ */
+  function majEnTete() {
+    const offres = allOffers.filter(o => !o.deleted_at).length;
+    const morceaux = [`${offres} offres`, `${allCategories.length} catégories`];
+    if (nbUtilisateursActives !== null) morceaux.push(`${nbUtilisateursActives} utilisateur${nbUtilisateursActives > 1 ? 's' : ''} activé${nbUtilisateursActives > 1 ? 's' : ''}`);
+    document.getElementById('header-info').textContent = morceaux.join(' · ');
+  }
+
+  /**
+ * FONCTION : chargerDemandesSuppression
+ * DESCRIPTION : Lit les demandes « Supprimer mon compte » envoyées depuis l'appli et pas encore traitées
+ * PARAMÈTRES : aucun
+ * RETOURNE : Promise<Array> — [{ id, user_id, created_at }] (tableau vide en cas d'erreur)
+ * MODIFIE : demandesSuppression
+ */
+  async function chargerDemandesSuppression() {
+    try {
+      const data = await supabaseQuery('messages_contact', {
+        select: 'id,user_id,created_at',
+        filter: `sujet=eq.${encodeURIComponent('Supprimer mon compte')}&traite_le=is.null`,
+        order: 'created_at.asc',
+      });
+      demandesSuppression = Array.isArray(data) ? data : [];
+    } catch (e) {
+      demandesSuppression = [];
+    }
+    return demandesSuppression;
+  }
+
+  /**
+ * FONCTION : dateLimiteSuppression
+ * DESCRIPTION : Date limite pour supprimer un compte (date de la demande + 30 jours)
+ * PARAMÈTRES :
+ *   - demande (object) : { created_at }
+ * RETOURNE : Date
+ * MODIFIE : rien
+ */
+  function dateLimiteSuppression(demande) {
+    return new Date(new Date(demande.created_at).getTime() + DELAI_SUPPRESSION_JOURS * 86400000);
+  }
+
+  /**
+ * FONCTION : afficherDemandesSuppressionTableauDeBord
+ * DESCRIPTION : Bloc rouge du tableau de bord listant les demandes de suppression non traitées,
+ *               avec la date limite (30 jours après la demande)
+ * PARAMÈTRES :
+ *   - profils (Array) : comptes (id, prenom, nom, email)
+ *   - demandes (Array) : demandes non traitées
+ * RETOURNE : rien
+ * MODIFIE : #dashboard-suppressions
+ */
+  function afficherDemandesSuppressionTableauDeBord(profils, demandes) {
+    const bloc = document.getElementById('dashboard-suppressions');
+    const lignes = demandes.map(d => ({ d, u: profils.find(p => p.id === d.user_id) })).filter(x => x.u);
+    if (!lignes.length) { bloc.style.display = 'none'; return; }
+    bloc.innerHTML = `<div style="font-weight:700;color:#B91C1C;margin-bottom:6px;">🗑️ ${lignes.length} demande${lignes.length > 1 ? 's' : ''} de suppression de compte</div>` +
+      lignes.map(({ d, u }) => `<div>• <strong>${echapperHtml([u.prenom, u.nom].filter(Boolean).join(' ') || u.email)}</strong>
+        — demandée le ${formaterDateHeure(d.created_at).split(' ')[0]}, <strong>à faire avant le ${dateLimiteSuppression(d).toLocaleDateString('fr-FR')}</strong></div>`).join('') +
+      `<div style="margin-top:8px;"><a href="#" onclick="ouvrirUtilisateurs();return false;" style="color:#003189;font-weight:600;">→ Traiter dans Utilisateurs</a></div>`;
+    bloc.style.display = 'block';
+  }
+
+  /**
+ * FONCTION : raisonsATraiter
+ * DESCRIPTION : Liste les raisons pour lesquelles un compte demande une intervention de l'admin,
+ *               de la plus urgente à la moins urgente
+ * PARAMÈTRES :
+ *   - u (object) : profil
+ * RETOURNE : Array<{ priorite, texte, demande? }> — vide si rien à faire
+ *            (priorite : 1 = la plus urgente ; demande = la demande de suppression concernée)
+ * MODIFIE : rien
+ */
+  function raisonsATraiter(u) {
+    const raisons = [];
+    const demande = demandesSuppression.find(d => d.user_id === u.id);
+    if (demande) {
+      const limite = dateLimiteSuppression(demande);
+      const enRetard = limite < new Date();
+      raisons.push({ priorite: 1, demande, texte: `🗑️ Suppression demandée le ${formaterDateHeure(demande.created_at).split(' ')[0]} — ${enRetard ? '⚠️ délai dépassé depuis le' : 'avant le'} ${limite.toLocaleDateString('fr-FR')}` });
+    }
+    if (!u.actif) raisons.push({ priorite: 2, texte: '⏸️ Compte désactivé (en attente d\'activation ?)' });
+    if (!u.matricule) raisons.push({ priorite: 3, texte: '🔢 Matricule à compléter' });
+    if (u.actif && !u.derniere_connexion && Date.now() - new Date(u.created_at).getTime() > DELAI_RELANCE_JOURS * 86400000) {
+      raisons.push({ priorite: 4, texte: `📵 Jamais connecté depuis la création (${formaterDateHeure(u.created_at).split(' ')[0]}) — à relancer` });
+    }
+    if (u.actif && u.derniere_connexion && u.mdp_a_changer === true) raisons.push({ priorite: 5, texte: '🔑 Mot de passe provisoire jamais changé' });
+    return raisons.sort((a, b) => a.priorite - b.priorite);
+  }
+
+  /**
+ * FONCTION : normaliserRecherche
+ * DESCRIPTION : Met un texte en minuscules sans accents, pour une recherche tolérante
+ * PARAMÈTRES :
+ *   - texte (string|null) : texte à normaliser
+ * RETOURNE : string
+ * MODIFIE : rien
+ */
+  function normaliserRecherche(texte) {
+    return String(texte ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  }
+
   /**
  * FONCTION : loadUsers
- * DESCRIPTION : Charge et affiche la liste des utilisateurs (table profils)
+ * DESCRIPTION : Charge les comptes (table profils) et les demandes de suppression,
+ *               remplit la liste des villes du filtre, puis affiche le tableau
  * PARAMÈTRES : aucun
  * RETOURNE : Promise<void>
- * MODIFIE : allUsers, contenu de #users-table et #users-count
+ * MODIFIE : allUsers, demandesSuppression, nbUtilisateursActives, #filtre-users-ville, #users-count, #users-table
  */
   async function loadUsers() {
-    const data = await supabaseQuery('profils', { select: '*', order: 'created_at.desc' });
+    const [data] = await Promise.all([
+      supabaseQuery('profils', { select: '*', order: 'created_at.desc' }),
+      chargerDemandesSuppression(),
+    ]);
     allUsers = Array.isArray(data) ? data : [];
-    const tbody = document.getElementById('users-table');
     const actifs = allUsers.filter(u => u.actif).length;
-    document.getElementById('users-count').textContent = `${allUsers.length} compte(s) · ${actifs} actif(s)`;
+    nbUtilisateursActives = actifs;
+    majEnTete();
+    const aTraiter = allUsers.filter(u => raisonsATraiter(u).length).length;
+    document.getElementById('users-count').innerHTML = `${allUsers.length} compte(s) · ${actifs} actif(s)` +
+      (aTraiter ? ` · <strong style="color:#C2410C;">⚠️ ${aTraiter} à traiter</strong>` : '');
+
+    // Liste des villes du filtre (on garde le choix en cours)
+    const selectVille = document.getElementById('filtre-users-ville');
+    const choix = selectVille.value;
+    const villes = [...new Set(allUsers.map(u => (u.ville || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    selectVille.innerHTML = '<option value="">Toutes les villes</option>' +
+      villes.map(v => `<option value="${echapperHtml(v)}">${echapperHtml(v)}</option>`).join('') +
+      (allUsers.some(u => !(u.ville || '').trim()) ? '<option value="__aucune">(ville non renseignée)</option>' : '');
+    selectVille.value = [...selectVille.options].some(o => o.value === choix) ? choix : '';
+
+    filtrerUtilisateurs();
+  }
+
+  /**
+ * FONCTION : filtrerUtilisateurs
+ * DESCRIPTION : Applique la recherche et les filtres, trie (comptes à traiter en premier, du plus
+ *               urgent au moins urgent, puis les autres du plus récent au plus ancien) et affiche le tableau
+ * PARAMÈTRES : aucun (lit #search-users et les listes #filtre-users-*)
+ * RETOURNE : rien
+ * MODIFIE : #users-table, #users-search-count
+ */
+  function filtrerUtilisateurs() {
+    const tbody = document.getElementById('users-table');
     if (allUsers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun utilisateur</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun utilisateur</td></tr>';
+      document.getElementById('users-search-count').textContent = '';
       return;
     }
-    const moi = sessionAdmin?.email;
-    // Version la plus récente utilisée par au moins un compte : sert de référence pour repérer
-    // les utilisateurs qui n'ont pas encore installé la dernière version
-    const versionRecente = allUsers.map(u => u.derniere_version).filter(Boolean).sort(comparerVersions).pop() || null;
-    tbody.innerHTML = allUsers.map(u => {
-      const nomComplet = [u.prenom, u.nom].filter(Boolean).join(' ');
-      const estMoi = u.email === moi;
-      return `<tr${u.actif ? '' : ' style="opacity:0.55;"'}>
-        <td><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}</td>
-        <td>${echapperHtml(u.email)}</td>
+    const recherche = normaliserRecherche(document.getElementById('search-users').value);
+    const statut = document.getElementById('filtre-users-statut').value;
+    const ville = document.getElementById('filtre-users-ville').value;
+    const activite = document.getElementById('filtre-users-activite').value;
+    const version = document.getElementById('filtre-users-version').value;
+    // Version la plus récente : celle réglée dans Paramètres, ou à défaut la plus récente vue sur un téléphone
+    const versionRecente = [versionsAppli?.derniere_version, ...allUsers.map(u => u.derniere_version)].filter(Boolean).sort(comparerVersions).pop() || null;
+    const il30jours = Date.now() - 30 * 86400000;
+
+    const lignes = allUsers.map(u => ({ u, raisons: raisonsATraiter(u) })).filter(({ u, raisons }) => {
+      if (recherche) {
+        const texte = normaliserRecherche([u.prenom, u.nom, u.email, u.matricule, u.ville].join(' '));
+        if (!recherche.split(/\s+/).every(mot => texte.includes(mot))) return false;
+      }
+      if (statut === 'a-traiter' && !raisons.length) return false;
+      if (statut === 'actifs' && !u.actif) return false;
+      if (statut === 'desactives' && u.actif) return false;
+      if (ville === '__aucune' && (u.ville || '').trim()) return false;
+      if (ville && ville !== '__aucune' && (u.ville || '').trim() !== ville) return false;
+      const derniere = u.derniere_connexion ? new Date(u.derniere_connexion).getTime() : null;
+      if (activite === 'actifs30' && !(derniere && derniere >= il30jours)) return false;
+      if (activite === 'inactifs30' && !(derniere && derniere < il30jours)) return false;
+      if (activite === 'jamais' && derniere) return false;
+      if (version === 'a-jour' && !(u.derniere_version && versionRecente && comparerVersions(u.derniere_version, versionRecente) >= 0)) return false;
+      if (version === 'ancienne' && !(u.derniere_version && versionRecente && comparerVersions(u.derniere_version, versionRecente) < 0)) return false;
+      return true;
+    }).sort((a, b) => {
+      const pa = a.raisons[0]?.priorite ?? 99;
+      const pb = b.raisons[0]?.priorite ?? 99;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.u.created_at) - new Date(a.u.created_at);
+    });
+
+    const filtreActif = recherche || statut || ville || activite || version;
+    document.getElementById('users-search-count').textContent = filtreActif ? `${lignes.length} compte(s) sur ${allUsers.length}` : '';
+    tbody.innerHTML = lignes.length
+      ? lignes.map(({ u, raisons }) => ligneUtilisateur(u, raisons, versionRecente)).join('')
+      : '<tr><td colspan="7" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun compte ne correspond à la recherche</td></tr>';
+  }
+
+  /**
+ * FONCTION : reinitialiserFiltresUtilisateurs
+ * DESCRIPTION : Vide la recherche et remet tous les filtres des comptes à zéro
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : #search-users, #filtre-users-*, tableau des comptes
+ */
+  function reinitialiserFiltresUtilisateurs() {
+    document.getElementById('search-users').value = '';
+    ['statut', 'ville', 'activite', 'version'].forEach(f => { document.getElementById('filtre-users-' + f).value = ''; });
+    filtrerUtilisateurs();
+  }
+
+  /**
+ * FONCTION : ligneUtilisateur
+ * DESCRIPTION : Ligne du tableau des comptes ; les comptes à traiter sont colorés et portent
+ *               la liste des raisons (et un bouton « Traitée » pour une demande de suppression)
+ * PARAMÈTRES :
+ *   - u (object) : profil
+ *   - raisons (Array) : résultat de raisonsATraiter(u)
+ *   - versionRecente (string|null) : version de référence pour la ligne 📱
+ * RETOURNE : string — HTML de la ligne
+ * MODIFIE : rien
+ */
+  function ligneUtilisateur(u, raisons, versionRecente) {
+    const nomComplet = [u.prenom, u.nom].filter(Boolean).join(' ');
+    const estMoi = u.email === sessionAdmin?.email;
+    const demande = raisons.find(r => r.demande)?.demande;
+    const fond = demande ? 'background:#FEF2F2;' : (raisons.length ? 'background:#FFF7ED;' : '');
+    const opacite = u.actif || raisons.length ? '' : 'opacity:0.55;';
+    const style = fond || opacite ? ` style="${fond}${opacite}"` : '';
+    // Raisons affichées sur une ligne pleine largeur, juste sous le compte
+    const ligneRaisons = raisons.length
+      ? `<tr style="${fond}"><td colspan="7" style="padding:0 16px 12px;border-bottom:1px solid #FDE2C8;font-size:12px;font-weight:600;color:${demande ? '#B91C1C' : '#C2410C'};">⚠️ À traiter : ${raisons.map(r => echapperHtml(r.texte)).join(' &nbsp;·&nbsp; ')}</td></tr>`
+      : '';
+    return `<tr${style}>
+        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}</td>
+        <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
         <td>${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}
           <div style="font-size:11px;margin-top:4px;white-space:nowrap;" title="Information « Données personnelles » acceptée dans l'application">${u.information_lue_le
             ? `<span style="color:#16A34A;">🛡️ Info lue le ${formaterDateHeure(u.information_lue_le).split(' ')[0]}</span>`
             : '<span style="color:#C2410C;">🛡️ Info non lue</span>'}</div></td>
-        <td style="text-align:center;">${u.nb_connexions || 0}</td>
-        <td>${formaterDateHeure(u.derniere_connexion)}${afficherVersionUtilisateur(u, versionRecente)}</td>
-        <td>${formaterDateHeure(u.created_at)}</td>
-        <td style="white-space:nowrap;">
+        <td>${formaterDateHeure(u.derniere_connexion)}${afficherVersionUtilisateur(u, versionRecente)}
+          <div style="font-size:11px;color:#6B7280;margin-top:2px;">${u.nb_connexions || 0} connexion${(u.nb_connexions || 0) > 1 ? 's' : ''}</div></td>
+        <td style="min-width:150px;line-height:2.2;">
+          ${demande ? `<button class="btn-edit" style="background:#16A34A;margin-bottom:4px;" onclick="marquerDemandeTraitee(${Number(demande.id)}, '${u.id}')" title="La demande a été traitée autrement (demande de test, annulée par l'utilisateur...). Pour supprimer le compte, utiliser 🗑️">✓ Traitée</button><br>` : ''}
           <button class="btn-edit" onclick="ouvrirFicheUtilisateur('${u.id}')" title="Modifier les informations">✏️</button>
           ${estMoi ? '' : `
             <button class="btn-edit" ${u.mdp_a_changer === true ? 'style="background:#FF6B00;"' : ''} onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')" title="${u.mdp_a_changer === true ? 'Mot de passe provisoire pas encore changé par l\'utilisateur — cliquer pour en créer un nouveau' : 'Nouveau mot de passe provisoire'}">🔑</button>
             ${u.actif
               ? `<button class="btn-orange" style="padding:6px 10px;font-size:12px;" onclick="actionUtilisateur('${u.id}', 'desactiver')" title="Bloquer la connexion">⏸️ Désactiver</button>`
               : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
-            <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement">🗑️</button>`}
+            <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement (la demande de suppression disparaît avec le compte)">🗑️</button>`}
         </td>
-      </tr>`;
-    }).join('');
+      </tr>${ligneRaisons}`;
+  }
+
+  /**
+ * FONCTION : marquerDemandeTraitee
+ * DESCRIPTION : Marque une demande « Supprimer mon compte » comme traitée sans supprimer le compte
+ *               (demande de test, annulée par l'utilisateur...). Supprimer le compte avec 🗑️
+ *               efface aussi la demande : pas besoin de la marquer dans ce cas.
+ * PARAMÈTRES :
+ *   - idDemande (number) : id de la ligne dans messages_contact
+ *   - idUtilisateur (string) : compte concerné (pour le journal)
+ * RETOURNE : Promise<void>
+ * MODIFIE : messages_contact.traite_le, journal (logs), tableau des comptes
+ */
+  async function marquerDemandeTraitee(idDemande, idUtilisateur) {
+    const u = allUsers.find(x => x.id === idUtilisateur);
+    const qui = u ? ([u.prenom, u.nom].filter(Boolean).join(' ') || u.email) : 'ce compte';
+    if (!confirm(`Marquer la demande de suppression de ${qui} comme traitée, SANS supprimer le compte ?\n\nÀ utiliser pour une demande de test ou annulée par l'utilisateur.\nPour supprimer le compte, utilisez plutôt le bouton 🗑️.`)) return;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/messages_contact?id=eq.${Number(idDemande)}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${jetonSession()}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({ traite_le: new Date().toISOString() })
+    });
+    if (!res.ok) { showAlert('❌ Impossible de marquer la demande comme traitée', 'error', 0); return; }
+    showAlert('✅ Demande marquée comme traitée', 'success', 4000);
+    addLog('🗑️ Demande de suppression traitée (compte conservé)', u ? `${qui} (${u.email})` : '');
+    loadUsers();
   }
 
   /** Minuteur d'effacement automatique de l'encadré des identifiants */
@@ -2965,7 +3239,7 @@ function togglePassword() {
     afficherOffresTerminees(terminees);
     afficherOffresQuiExpirent(horsPoubelle);
     document.getElementById('stat-categories').textContent = allCategories.length;
-    document.getElementById('header-info').textContent = `${horsPoubelle.length} offres · ${allCategories.length} catégories`;
+    majEnTete();
 
     const tbody = document.getElementById('dashboard-table');
     tbody.innerHTML = horsPoubelle.slice(0, 10).map(o => {
@@ -2984,15 +3258,23 @@ function togglePassword() {
   /**
  * FONCTION : loadDashboardUtilisateurs
  * DESCRIPTION : Compte les utilisateurs activés et ceux en attente d'activation (compte désactivé),
- *               et liste ces derniers (nom, email, date de création) sur le tableau de bord
+ *               et liste ces derniers (nom, email, date de création) sur le tableau de bord ;
+ *               affiche aussi les demandes de suppression de compte non traitées et met à jour l'en-tête
  * PARAMÈTRES : aucun
  * RETOURNE : Promise<void>
- * MODIFIE : #stat-users-actifs, #stat-users-attente, #dashboard-attente
+ * MODIFIE : #stat-users-actifs, #stat-users-attente, #dashboard-attente, #dashboard-suppressions,
+ *           nbUtilisateursActives, #header-info
  */
   async function loadDashboardUtilisateurs() {
-    const data = await supabaseQuery('profils', { select: 'id,prenom,nom,email,actif,created_at', order: 'created_at.asc' });
+    const [data, demandes] = await Promise.all([
+      supabaseQuery('profils', { select: 'id,prenom,nom,email,actif,created_at', order: 'created_at.asc' }),
+      chargerDemandesSuppression(),
+    ]);
     const profils = Array.isArray(data) ? data : [];
     const enAttente = profils.filter(u => !u.actif);
+    nbUtilisateursActives = profils.length - enAttente.length;
+    majEnTete();
+    afficherDemandesSuppressionTableauDeBord(profils, demandes);
     document.getElementById('stat-users-actifs').textContent = profils.length - enAttente.length;
     document.getElementById('stat-users-attente').textContent = enAttente.length;
     marquerCarteAlerte('carte-attente', enAttente.length);
