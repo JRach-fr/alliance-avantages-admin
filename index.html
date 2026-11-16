@@ -112,6 +112,10 @@
     tr.ligne-cliquable { cursor: pointer; }
     tr.ligne-cliquable:hover td { background: #F4F6FB; }
     @keyframes pulse-alerte { 0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.35); } 50% { box-shadow: 0 0 0 8px rgba(220,38,38,0); } }
+    @media (max-width: 800px) { .user-fiche-grille { grid-template-columns: 1fr !important; } }
+    #users-table tr.ligne-compte { cursor: pointer; }
+    #users-table tr.ligne-compte:hover td { background: #EEF2FA; }
+    #users-table tr.ligne-compte.selectionnee td { background: #DBEAFE; }
     @media (prefers-reduced-motion: reduce) { .stat-card.alerte { animation: none; } }
 
     /* SECTIONS */
@@ -695,6 +699,56 @@
   </div>
   </div>
 
+  <!-- Fiche d'un compte : s'ouvre au-dessus de la liste quand on clique sur une ligne du tableau.
+       Regroupe tout : informations modifiables, parcours d'accès, points à traiter et toutes les actions. -->
+  <div id="user-fiche" style="display:none;margin-bottom:20px;">
+  <div class="form-card" style="border-top:4px solid #003189;">
+    <input type="hidden" id="user-edit-id">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div>
+        <h3 id="user-fiche-titre" style="margin-bottom:4px;"></h3>
+        <div style="font-size:13px;color:#6B7280;">Compte : <strong id="user-edit-email"></strong> <span style="color:#9CA3AF;">(l'e-mail ne se modifie pas)</span></div>
+        <div id="user-fiche-infos" style="font-size:12px;color:#6B7280;margin-top:4px;"></div>
+      </div>
+      <button onclick="fermerFicheUtilisateur()" title="Fermer la fiche" style="background:none;border:none;font-size:26px;cursor:pointer;color:#6B7280;line-height:1;">×</button>
+    </div>
+
+    <div id="user-fiche-a-traiter" style="display:none;margin-top:14px;padding:10px 14px;border-radius:10px;background:#FFF7ED;border:1px solid #FED7AA;font-size:13px;line-height:1.7;"></div>
+
+    <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;margin-top:16px;" class="user-fiche-grille">
+      <!-- Informations modifiables -->
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Informations</div>
+        <div class="form-grid">
+          <div class="form-group"><label>Prénom *</label><input type="text" id="user-edit-prenom" maxlength="80"></div>
+          <div class="form-group"><label>Nom *</label><input type="text" id="user-edit-nom" maxlength="80" style="text-transform:uppercase;"></div>
+          <div class="form-group"><label>Ville</label><input type="text" id="user-edit-ville" maxlength="80"></div>
+          <div class="form-group"><label>Matricule *</label><input type="text" id="user-edit-matricule" maxlength="7" inputmode="numeric" placeholder="7 chiffres"></div>
+        </div>
+        <label id="user-edit-mdp-ligne" style="display:none;align-items:center;gap:10px;margin-top:12px;font-size:14px;cursor:pointer;">
+          <input type="checkbox" id="user-edit-mdp" style="width:18px;height:18px;">
+          🔑 Changement du mot de passe obligatoire à la prochaine ouverture de l'app
+        </label>
+        <p id="user-edit-mdp-aide" style="display:none;font-size:12px;color:#6B7280;margin:6px 0 0 28px;">
+          Décocher pour un compte de démonstration (ex. compte de test Google), dont le mot de passe ne doit pas changer.
+        </p>
+        <button class="btn-primary" style="margin-top:14px;" onclick="enregistrerFicheUtilisateur()">💾 Enregistrer les informations</button>
+      </div>
+      <!-- Parcours d'accès -->
+      <div>
+        <div style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Parcours d'accès</div>
+        <div id="user-fiche-parcours" style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:6px 14px;"></div>
+      </div>
+    </div>
+
+    <!-- Actions sur le compte -->
+    <div id="user-fiche-actions-bloc" style="margin-top:18px;padding-top:14px;border-top:1px solid #E5E7EB;">
+      <div style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actions</div>
+      <div id="user-fiche-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;"></div>
+    </div>
+  </div>
+  </div>
+
   <!-- Recherche et filtres des comptes (les comptes « à traiter » sont toujours affichés en premier) -->
   <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
     <input type="text" id="search-users" placeholder="🔍 Rechercher : nom, prénom, e-mail, matricule, ville..." oninput="filtrerUtilisateurs()"
@@ -733,11 +787,10 @@
           <th>Matricule</th>
           <th>Statut</th>
           <th>Dernière connexion</th>
-          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="users-table">
-        <tr><td colspan="7" class="loading">Chargement...</td></tr>
+        <tr><td colspan="6" class="loading">Chargement...</td></tr>
       </tbody>
     </table>
   </div>
@@ -1195,88 +1248,6 @@
       </div>
     </div>
 
-  </div>
-</div>
-
-<!-- MODAL FICHE UTILISATEUR -->
-<!--
-  COMPOSANT  : Fiche utilisateur
-  DESCRIPTION : Modification par l'administrateur du prénom, du nom, de la ville et du matricule
-                (l'utilisateur ne peut pas modifier ces informations dans l'app),
-                et de l'obligation de changer le mot de passe provisoire
--->
-<div class="modal-overlay" id="user-edit-modal">
-  <div class="modal" style="max-width:520px;">
-    <div class="modal-header">
-      <h3>✏️ Fiche utilisateur</h3>
-      <button class="modal-close" onclick="fermerFicheUtilisateur()">×</button>
-    </div>
-    <input type="hidden" id="user-edit-id">
-    <p style="font-size:13px;color:#6B7280;margin-bottom:14px;">Compte : <strong id="user-edit-email"></strong> (l'email ne se modifie pas ici)</p>
-    <div class="form-grid">
-      <div class="form-group"><label>Prénom *</label><input type="text" id="user-edit-prenom" maxlength="80"></div>
-      <div class="form-group"><label>Nom *</label><input type="text" id="user-edit-nom" maxlength="80" style="text-transform:uppercase;"></div>
-      <div class="form-group"><label>Ville</label><input type="text" id="user-edit-ville" maxlength="80"></div>
-      <div class="form-group"><label>Matricule *</label><input type="text" id="user-edit-matricule" maxlength="7" inputmode="numeric" placeholder="7 chiffres"></div>
-    </div>
-    <label id="user-edit-mdp-ligne" style="display:none;align-items:center;gap:10px;margin-top:14px;font-size:14px;cursor:pointer;">
-      <input type="checkbox" id="user-edit-mdp" style="width:18px;height:18px;">
-      🔑 Changement du mot de passe obligatoire à la prochaine ouverture de l'app
-    </label>
-    <p id="user-edit-mdp-aide" style="display:none;font-size:12px;color:#6B7280;margin:6px 0 0 28px;">
-      Décocher pour un compte de démonstration (ex. compte de test Google), dont le mot de passe ne doit pas changer.
-    </p>
-    <div style="display:flex;gap:10px;margin-top:18px;">
-      <button class="btn-primary" onclick="enregistrerFicheUtilisateur()">💾 Enregistrer</button>
-      <button class="btn-danger" style="padding:10px 16px;font-size:14px;" onclick="fermerFicheUtilisateur()">Annuler</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL DROITS ADMINISTRATEUR -->
-<!--
-  COMPOSANT  : Droits administrateur
-  DESCRIPTION : Donner ou retirer les droits administrateur à un compte, en deux étapes :
-                RÉSERVÉ AU SUPER ADMINISTRATEUR (bouton 🛡️ visible pour lui seul, vérifié par le serveur)
-                1. message d'avertissement + case « je comprends » → un code à 6 chiffres est envoyé
-                   sur l'adresse du super administrateur (jrach.dev@gmail.com) ;
-                2. saisie du code (valable 10 minutes, 5 essais) → droits changés, action notée au journal.
--->
-<div class="modal-overlay" id="admin-role-modal">
-  <div class="modal" style="max-width:520px;">
-    <div class="modal-header">
-      <h3 id="admin-role-titre">🛡️ Droits administrateur</h3>
-      <button class="modal-close" onclick="fermerDroitsAdmin()">×</button>
-    </div>
-    <input type="hidden" id="admin-role-id">
-    <input type="hidden" id="admin-role-operation">
-    <!-- Étape 1 : avertissement -->
-    <div id="admin-role-etape1">
-      <div id="admin-role-avertissement" style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:14px 16px;font-size:14px;line-height:1.6;color:#7F1D1D;"></div>
-      <label style="display:flex;align-items:flex-start;gap:10px;margin-top:14px;font-size:14px;cursor:pointer;">
-        <input type="checkbox" id="admin-role-compris" style="width:18px;height:18px;margin-top:2px;" onchange="document.getElementById('admin-role-envoyer').disabled = !this.checked">
-        <span id="admin-role-compris-texte"></span>
-      </label>
-      <div style="display:flex;gap:10px;margin-top:18px;">
-        <button class="btn-primary" id="admin-role-envoyer" disabled onclick="envoyerCodeAdmin()">📧 M'envoyer le code de confirmation</button>
-        <button class="btn-danger" style="padding:10px 16px;font-size:14px;" onclick="fermerDroitsAdmin()">Annuler</button>
-      </div>
-    </div>
-    <!-- Étape 2 : saisie du code -->
-    <div id="admin-role-etape2" style="display:none;">
-      <p id="admin-role-info-code" style="font-size:14px;line-height:1.6;margin-bottom:12px;"></p>
-      <div class="form-group">
-        <label>Code reçu par e-mail (6 chiffres)</label>
-        <input type="text" id="admin-role-code" maxlength="6" inputmode="numeric" autocomplete="one-time-code" placeholder="••••••"
-          style="font-size:24px;letter-spacing:8px;text-align:center;font-family:monospace;"
-          onkeydown="if (event.key === 'Enter') confirmerCodeAdmin()">
-      </div>
-      <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-        <button class="btn-primary" id="admin-role-confirmer" onclick="confirmerCodeAdmin()">✅ Confirmer</button>
-        <button class="btn-edit" style="padding:10px 14px;" onclick="envoyerCodeAdmin()">↻ Renvoyer un code</button>
-        <button class="btn-danger" style="padding:10px 16px;font-size:14px;" onclick="fermerDroitsAdmin()">Annuler</button>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -2667,6 +2638,8 @@ function togglePassword() {
     selectVille.value = [...selectVille.options].some(o => o.value === choix) ? choix : '';
 
     filtrerUtilisateurs();
+    // La fiche ouverte est mise à jour (ou refermée si le compte n'existe plus)
+    if (ficheOuverteId) rendreFicheUtilisateur(ficheOuverteId);
   }
 
   /**
@@ -2680,7 +2653,7 @@ function togglePassword() {
   function filtrerUtilisateurs() {
     const tbody = document.getElementById('users-table');
     if (allUsers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun utilisateur</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun utilisateur</td></tr>';
       document.getElementById('users-search-count').textContent = '';
       return;
     }
@@ -2721,7 +2694,7 @@ function togglePassword() {
     document.getElementById('users-search-count').textContent = filtreActif ? `${lignes.length} compte(s) sur ${allUsers.length}` : '';
     tbody.innerHTML = lignes.length
       ? lignes.map(({ u, raisons }) => ligneUtilisateur(u, raisons, versionRecente)).join('')
-      : '<tr><td colspan="7" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun compte ne correspond à la recherche</td></tr>';
+      : '<tr><td colspan="6" style="text-align:center;color:#9CA3AF;padding:20px;">Aucun compte ne correspond à la recherche</td></tr>';
   }
 
   /**
@@ -2739,8 +2712,8 @@ function togglePassword() {
 
   /**
  * FONCTION : ligneUtilisateur
- * DESCRIPTION : Ligne du tableau des comptes ; les comptes à traiter sont colorés et portent
- *               la liste des raisons (et un bouton « Traitée » pour une demande de suppression)
+ * DESCRIPTION : Ligne du tableau des comptes (cliquable : ouvre la fiche du compte au-dessus de la liste) ;
+ *               les comptes à traiter sont colorés et portent la liste des raisons
  * PARAMÈTRES :
  *   - u (object) : profil
  *   - raisons (Array) : résultat de raisonsATraiter(u)
@@ -2771,7 +2744,8 @@ function togglePassword() {
           <span class="infobulle">Compte créé le ${formaterDateHeure(u.created_at).split(' ')[0]} : l'utilisateur ne s'est pas encore connecté.<br>
           Rien à faire pour l'instant. S'il ne s'est toujours pas connecté le ${relance.toLocaleDateString('fr-FR')}, il passera « À traiter » (à relancer).</span></span></div>`;
     }
-    return `<tr${style}>
+    const selection = u.id === ficheOuverteId ? ' selectionnee' : '';
+    return `<tr class="ligne-compte${selection}"${style} onclick="ouvrirFicheUtilisateur('${u.id}')" title="Cliquer pour ouvrir la fiche du compte">
         <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ` <span class="badge badge-orange">vous · ${estSuperAdminCompte ? '👑 super admin' : 'admin'}</span>` : (estSuperAdminCompte ? ' <span class="badge badge-orange">👑 super admin</span>' : (estAdminCompte ? ' <span class="badge badge-orange">🛡️ admin</span>' : ''))}${pastille}${pastilleAttente}</td>
         <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
@@ -2782,17 +2756,6 @@ function togglePassword() {
             : '<span style="color:#C2410C;">🛡️ Info non lue</span>'}</div></td>
         <td>${formaterDateHeure(u.derniere_connexion)}${afficherVersionUtilisateur(u, versionRecente)}
           <div style="font-size:11px;color:#6B7280;margin-top:2px;">${u.nb_connexions || 0} connexion${(u.nb_connexions || 0) > 1 ? 's' : ''}</div></td>
-        <td style="min-width:150px;line-height:2.2;">
-          ${demande ? `<button class="btn-edit" style="background:#16A34A;margin-bottom:4px;" onclick="marquerDemandeTraitee(${Number(demande.id)}, '${u.id}')" title="La demande a été traitée autrement (demande de test, annulée par l'utilisateur...). Pour supprimer le compte, utiliser 🗑️">✓ Traitée</button><br>` : ''}
-          <button class="btn-edit" onclick="ouvrirFicheUtilisateur('${u.id}')" title="Modifier les informations">✏️</button>
-          ${estMoi || estSuperAdminCompte ? '' : `
-            <button class="btn-edit" ${u.mdp_a_changer === true ? 'style="background:#FF6B00;"' : ''} onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')" title="${u.mdp_a_changer === true ? 'Mot de passe provisoire pas encore changé par l\'utilisateur — cliquer pour en créer un nouveau' : 'Nouveau mot de passe provisoire'}">🔑</button>
-            ${u.actif
-              ? `<button class="btn-orange" style="padding:6px 10px;font-size:12px;" onclick="actionUtilisateur('${u.id}', 'desactiver')" title="Bloquer la connexion">⏸️ Désactiver</button>`
-              : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
-            ${moiSuperAdmin ? `<button class="btn-edit" style="background:${estAdminCompte ? '#7C3AED' : '#4B5563'};" onclick="ouvrirDroitsAdmin('${u.id}')" title="${estAdminCompte ? 'Retirer les droits administrateur (confirmation par code e-mail)' : 'Donner les droits administrateur (confirmation par code e-mail)'}">🛡️</button>` : ''}
-            <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement (la demande de suppression disparaît avec le compte)">🗑️</button>`}
-        </td>
       </tr>`;
   }
 
@@ -3013,42 +2976,136 @@ function togglePassword() {
     return `<div style="font-size:11px;margin-top:4px;white-space:nowrap;color:${couleur};" title="${echapperHtml(info)}">📱 v${echapperHtml(u.derniere_version)}${plateforme ? ' · ' + echapperHtml(plateforme) : ''}</div>`;
   }
 
+  /** Compte dont la fiche est ouverte au-dessus de la liste (null si aucune) */
+  let ficheOuverteId = null;
+
   /**
  * FONCTION : ouvrirFicheUtilisateur
- * DESCRIPTION : Ouvre la fiche d'un utilisateur pour modifier prénom, nom, ville et matricule
- *               (seul l'administrateur peut modifier ces informations), et l'obligation de
- *               changer le mot de passe (case visible si la colonne mdp_a_changer existe)
+ * DESCRIPTION : Ouvre la fiche d'un compte au-dessus de la liste (clic sur une ligne du tableau) ;
+ *               un second clic sur la même ligne la referme
  * PARAMÈTRES :
  *   - id (string) : identifiant du compte
  * RETOURNE : rien
- * MODIFIE : champs de #user-edit-modal, affichage de la fenêtre
+ * MODIFIE : ficheOuverteId, #user-fiche, ligne sélectionnée du tableau
  */
   function ouvrirFicheUtilisateur(id) {
-    const u = allUsers.find(x => x.id === id);
-    if (!u) return;
-    document.getElementById('user-edit-id').value = u.id;
-    document.getElementById('user-edit-email').textContent = u.email || '';
-    document.getElementById('user-edit-prenom').value = u.prenom || '';
-    document.getElementById('user-edit-nom').value = u.nom || '';
-    document.getElementById('user-edit-ville').value = u.ville || '';
-    document.getElementById('user-edit-matricule').value = u.matricule || '';
-    // Case « mot de passe à changer » : affichée seulement si la colonne existe dans la base
-    const colonneMdp = Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer');
-    document.getElementById('user-edit-mdp-ligne').style.display = colonneMdp ? 'flex' : 'none';
-    document.getElementById('user-edit-mdp-aide').style.display = colonneMdp ? 'block' : 'none';
-    document.getElementById('user-edit-mdp').checked = u.mdp_a_changer === true;
-    document.getElementById('user-edit-modal').classList.add('open');
+    if (ficheOuverteId === id && document.getElementById('user-fiche').style.display !== 'none') { fermerFicheUtilisateur(); return; }
+    if (!allUsers.some(x => x.id === id)) return;
+    ficheOuverteId = id;
+    rendreFicheUtilisateur(id);
+    document.getElementById('user-fiche').style.display = 'block';
+    document.querySelectorAll('#users-table tr.ligne-compte').forEach(tr => tr.classList.toggle('selectionnee', tr.getAttribute('onclick')?.includes(`'${id}'`)));
+    document.getElementById('user-fiche').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   /**
  * FONCTION : fermerFicheUtilisateur
- * DESCRIPTION : Ferme la fiche utilisateur sans enregistrer
+ * DESCRIPTION : Referme la fiche du compte (sans enregistrer)
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : affichage de #user-edit-modal
+ * MODIFIE : ficheOuverteId, #user-fiche, ligne sélectionnée du tableau
  */
   function fermerFicheUtilisateur() {
-    document.getElementById('user-edit-modal').classList.remove('open');
+    ficheOuverteId = null;
+    document.getElementById('user-fiche').style.display = 'none';
+    document.querySelectorAll('#users-table tr.selectionnee').forEach(tr => tr.classList.remove('selectionnee'));
+  }
+
+  /**
+ * FONCTION : parcoursAcces
+ * DESCRIPTION : Étapes de l'accès d'un utilisateur, de la création du compte jusqu'à l'accès complet
+ *               (même logique que la fiche de la partie « Admin » de l'application)
+ * PARAMÈTRES :
+ *   - u (object) : profil
+ * RETOURNE : Array<{ libelle, faite, detail }>
+ * MODIFIE : rien
+ */
+  function parcoursAcces(u) {
+    const date = (v) => v ? formaterDateHeure(v).split(' ')[0] : '';
+    const connecte = !!u.derniere_connexion;
+    return [
+      { libelle: 'Compte créé', faite: true, detail: date(u.created_at) },
+      { libelle: 'Compte activé', faite: !!u.actif, detail: u.actif ? '' : 'désactivé : il ne peut pas se connecter' },
+      { libelle: 'Première connexion', faite: connecte, detail: connecte ? `dernière le ${date(u.derniere_connexion)}` : 'pas encore connecté' },
+      { libelle: 'Données personnelles lues', faite: !!u.information_lue_le, detail: date(u.information_lue_le) },
+      { libelle: 'Mot de passe personnel choisi', faite: connecte && u.mdp_a_changer === false, detail: u.mdp_a_changer === true ? 'utilise encore le mot de passe provisoire' : '' },
+    ];
+  }
+
+  /**
+ * FONCTION : rendreFicheUtilisateur
+ * DESCRIPTION : Remplit la fiche d'un compte : titre et badges, informations modifiables, points
+ *               à traiter, parcours d'accès, et boutons d'action selon les droits :
+ *               - son propre compte et le super administrateur : informations seulement ;
+ *               - droits administrateur : bouton visible pour le super administrateur uniquement ;
+ *               - suppression à part, en rouge.
+ * PARAMÈTRES :
+ *   - id (string) : identifiant du compte
+ * RETOURNE : rien
+ * MODIFIE : contenu de #user-fiche
+ */
+  function rendreFicheUtilisateur(id) {
+    const u = allUsers.find(x => x.id === id);
+    if (!u) { fermerFicheUtilisateur(); return; }
+    const estMoi = u.email === sessionAdmin?.email;
+    const estAdminCompte = idsAdmins.includes(u.id);
+    const estSuperAdminCompte = idsSuperAdmins.includes(u.id);
+    const raisons = raisonsATraiter(u);
+    const demande = raisons.find(r => r.demande)?.demande;
+    const nom = [u.prenom, u.nom].filter(Boolean).join(' ') || '(nom non renseigné)';
+    const badge = estSuperAdminCompte ? ' <span class="badge badge-orange">👑 super admin</span>'
+      : (estAdminCompte ? ' <span class="badge badge-orange">🛡️ admin</span>' : '');
+    document.getElementById('user-fiche-titre').innerHTML = `👤 ${echapperHtml(nom)}${estMoi ? ' <span class="badge badge-orange">vous</span>' : ''}${badge}
+      ${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}`;
+    document.getElementById('user-edit-id').value = u.id;
+    document.getElementById('user-edit-email').textContent = u.email || '';
+    const plateformes = { android: 'Android', ios: 'iPhone', web: 'Web' };
+    document.getElementById('user-fiche-infos').textContent = [
+      `créé le ${formaterDateHeure(u.created_at).split(' ')[0]}`,
+      `${u.nb_connexions || 0} connexion${(u.nb_connexions || 0) > 1 ? 's' : ''}`,
+      u.derniere_version ? `appli v${u.derniere_version}${u.derniere_plateforme ? ' · ' + (plateformes[u.derniere_plateforme] || u.derniere_plateforme) : ''}` : 'appli jamais ouverte',
+    ].join(' · ');
+
+    // Informations modifiables
+    document.getElementById('user-edit-prenom').value = u.prenom || '';
+    document.getElementById('user-edit-nom').value = u.nom || '';
+    document.getElementById('user-edit-ville').value = u.ville || '';
+    document.getElementById('user-edit-matricule').value = u.matricule || '';
+    const colonneMdp = Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer');
+    document.getElementById('user-edit-mdp-ligne').style.display = colonneMdp ? 'flex' : 'none';
+    document.getElementById('user-edit-mdp-aide').style.display = colonneMdp ? 'block' : 'none';
+    document.getElementById('user-edit-mdp').checked = u.mdp_a_changer === true;
+
+    // Points à traiter
+    const blocTraiter = document.getElementById('user-fiche-a-traiter');
+    blocTraiter.innerHTML = raisons.map(r => echapperHtml(r.texte)).join('<br>');
+    blocTraiter.style.display = raisons.length ? 'block' : 'none';
+    blocTraiter.style.background = demande ? '#FEF2F2' : '#FFF7ED';
+    blocTraiter.style.borderColor = demande ? '#FECACA' : '#FED7AA';
+
+    // Parcours d'accès
+    document.getElementById('user-fiche-parcours').innerHTML = parcoursAcces(u).map((e, i, liste) => `
+      <div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;${i < liste.length - 1 ? 'border-bottom:1px solid #EEF0F4;' : ''}">
+        <span style="font-size:16px;line-height:20px;">${e.faite ? '✅' : '⭕'}</span>
+        <div><div style="font-size:14px;font-weight:600;color:${e.faite ? '#111827' : '#9A3412'};">${echapperHtml(e.libelle)}</div>
+        ${e.detail ? `<div style="font-size:12px;color:#6B7280;">${echapperHtml(e.detail)}</div>` : ''}</div>
+      </div>`).join('');
+
+    // Actions
+    const actions = [];
+    if (demande) actions.push(`<button class="btn-edit" style="background:#16A34A;padding:10px 14px;font-size:13px;" onclick="marquerDemandeTraitee(${Number(demande.id)}, '${u.id}')" title="Demande de test ou annulée par l'utilisateur. Pour supprimer le compte, utiliser « Supprimer le compte »">✓ Demande de suppression traitée</button>`);
+    if (!estMoi && !estSuperAdminCompte) {
+      actions.push(`<button class="btn-edit" style="padding:10px 14px;font-size:13px;${u.mdp_a_changer === true ? 'background:#FF6B00;' : ''}" onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')">🔑 Nouveau mot de passe provisoire</button>`);
+      actions.push(u.actif
+        ? `<button class="btn-orange" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'desactiver')">⏸️ Désactiver le compte</button>`
+        : `<button class="btn-edit" style="background:#10B981;padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'activer')">▶️ Activer le compte</button>`);
+      if (moiSuperAdmin) actions.push(`<button class="btn-edit" style="background:${estAdminCompte ? '#7C3AED' : '#4B5563'};padding:10px 14px;font-size:13px;" onclick="ouvrirDroitsAdmin('${u.id}')">🛡️ ${estAdminCompte ? 'Retirer les droits admin' : 'Donner les droits admin'}</button>`);
+      if (u.email) actions.push(`<a class="btn-edit" style="padding:10px 14px;font-size:13px;text-decoration:none;display:inline-block;" href="mailto:${encodeURIComponent(u.email)}?subject=${encodeURIComponent('Alliance Avantages')}">✉️ Écrire un e-mail</a>`);
+      actions.push(`<span style="flex:1;"></span><button class="btn-danger" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'supprimer')">🗑️ Supprimer le compte</button>`);
+    } else {
+      actions.push(`<span style="font-size:13px;color:#6B7280;">${estSuperAdminCompte && !estMoi ? '👑 Compte super administrateur : protégé, aucune action possible.' : 'Votre propre compte : seules les informations sont modifiables ici.'}</span>`);
+    }
+    document.getElementById('user-fiche-actions').innerHTML = actions.join('');
   }
 
   /**
@@ -3097,8 +3154,7 @@ function togglePassword() {
     const changements = Object.keys(donnees).filter(k => k !== 'mdp_a_changer' && (u?.[k] || '') !== (donnees[k] || '')).map(k => `${k} : ${u?.[k] || '—'} → ${donnees[k] || '—'}`);
     if (colonneMdp && u.mdp_a_changer !== mdpAChanger) changements.push(`changement de mot de passe obligatoire : ${mdpAChanger ? 'oui' : 'non'}`);
     if (changements.length) addLog('✏️ Utilisateur modifié', `${donnees.prenom} ${donnees.nom} — ${changements.join(', ')}`);
-    fermerFicheUtilisateur();
-    showAlert('✅ Fiche enregistrée', 'success', 3000);
+    showAlert('✅ Informations enregistrées', 'success', 3000);
     loadUsers();
   }
 
