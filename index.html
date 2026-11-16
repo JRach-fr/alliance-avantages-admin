@@ -744,7 +744,7 @@
     <!-- Actions sur le compte -->
     <div id="user-fiche-actions-bloc" style="margin-top:18px;padding-top:14px;border-top:1px solid #E5E7EB;">
       <div style="font-size:12px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Actions</div>
-      <div id="user-fiche-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;"></div>
+      <div id="user-fiche-actions" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start;"></div>
     </div>
   </div>
   </div>
@@ -3099,9 +3099,13 @@ function togglePassword() {
       actions.push(u.actif
         ? `<button class="btn-orange" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'desactiver')">⏸️ Désactiver le compte</button>`
         : `<button class="btn-edit" style="background:#10B981;padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'activer')">▶️ Activer le compte</button>`);
-      if (moiSuperAdmin) actions.push(`<button class="btn-edit" style="background:${estAdminCompte ? '#7C3AED' : '#4B5563'};padding:10px 14px;font-size:13px;" onclick="ouvrirDroitsAdmin('${u.id}')">🛡️ ${estAdminCompte ? 'Retirer les droits admin' : 'Donner les droits admin'}</button>`);
       if (u.email) actions.push(`<a class="btn-edit" style="padding:10px 14px;font-size:13px;text-decoration:none;display:inline-block;" href="mailto:${encodeURIComponent(u.email)}?subject=${encodeURIComponent('Alliance Avantages')}">✉️ Écrire un e-mail</a>`);
-      actions.push(`<span style="flex:1;"></span><button class="btn-danger" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'supprimer')">🗑️ Supprimer le compte</button>`);
+      // Actions sensibles, à part sur la droite : droits admin (super admin uniquement) au-dessus de la suppression
+      actions.push(`<span style="flex:1;"></span>
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch;">
+          ${moiSuperAdmin ? `<button class="btn-orange" style="padding:10px 14px;font-size:13px;" onclick="ouvrirDroitsAdmin('${u.id}')">🛡️ ${estAdminCompte ? 'Retirer les droits admin' : 'Donner les droits admin'}</button>` : ''}
+          <button class="btn-danger" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'supprimer')">🗑️ Supprimer le compte</button>
+        </div>`);
     } else {
       actions.push(`<span style="font-size:13px;color:#6B7280;">${estSuperAdminCompte && !estMoi ? '👑 Compte super administrateur : protégé, aucune action possible.' : 'Votre propre compte : seules les informations sont modifiables ici.'}</span>`);
     }
