@@ -176,8 +176,9 @@
     .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6B7280; }
 
     /* UTILISATEURS : pastille « À traiter » avec infobulle au survol */
-    .a-traiter { position: relative; display: inline-block; margin-top: 6px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: help; background: #FFEDD5; color: #C2410C; }
+    .a-traiter { position: relative; display: inline-block; white-space: nowrap; margin-top: 6px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: help; background: #FFEDD5; color: #C2410C; }
     .a-traiter.urgent { background: #FEE2E2; color: #B91C1C; }
+    .a-traiter.attente { background: #F3F4F6; color: #4B5563; font-weight: 600; }
     .a-traiter .infobulle { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; background: #14213D; color: #FFFFFF;
       padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; line-height: 1.7; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
     .a-traiter:hover .infobulle, .a-traiter:focus .infobulle { display: block; }
@@ -2684,8 +2685,17 @@ function togglePassword() {
       ? `<div><span class="a-traiter${demande ? ' urgent' : ''}" tabindex="0">⚠️ À traiter${raisons.length > 1 ? ` (${raisons.length})` : ''}
           <span class="infobulle">${raisons.map(r => echapperHtml(r.texte)).join('<br>')}</span></span></div>`
       : '';
+    // Pastille grise (simple information, pas « à traiter ») : compte activé récent, jamais connecté,
+    // dans les 7 jours avant la relance conseillée
+    let pastilleAttente = '';
+    if (u.actif && !u.derniere_connexion && !raisons.length) {
+      const relance = new Date(new Date(u.created_at).getTime() + DELAI_RELANCE_JOURS * 86400000);
+      pastilleAttente = `<div><span class="a-traiter attente" tabindex="0">⏳ En attente de 1re connexion
+          <span class="infobulle">Compte créé le ${formaterDateHeure(u.created_at).split(' ')[0]} : l'utilisateur ne s'est pas encore connecté.<br>
+          Rien à faire pour l'instant. S'il ne s'est toujours pas connecté le ${relance.toLocaleDateString('fr-FR')}, il passera « À traiter » (à relancer).</span></span></div>`;
+    }
     return `<tr${style}>
-        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}${pastille}</td>
+        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}${pastille}${pastilleAttente}</td>
         <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
