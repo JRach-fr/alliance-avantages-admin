@@ -175,6 +175,13 @@
     .modal-header h3 { font-size: 18px; font-weight: 700; color: #001F5E; }
     .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #6B7280; }
 
+    /* UTILISATEURS : pastille « À traiter » avec infobulle au survol */
+    .a-traiter { position: relative; display: inline-block; margin-top: 6px; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: help; background: #FFEDD5; color: #C2410C; }
+    .a-traiter.urgent { background: #FEE2E2; color: #B91C1C; }
+    .a-traiter .infobulle { display: none; position: absolute; left: 0; top: calc(100% + 6px); z-index: 60; background: #14213D; color: #FFFFFF;
+      padding: 10px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; line-height: 1.7; white-space: nowrap; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+    .a-traiter:hover .infobulle, .a-traiter:focus .infobulle { display: block; }
+
     /* STATISTIQUES */
     .barre-stats { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
     .periode-stats, .onglets-stats { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -662,6 +669,10 @@
       uniquement pour vérifier le droit d'accès, ouvrir le compte et afficher les offres proches.
       Elles ne sont visibles que par l'administrateur et par l'utilisateur lui-même, et seul l'administrateur peut les modifier.
     </p>
+    <label class="toggle-item" style="margin-bottom:12px;">
+      <input type="checkbox" id="user-envoyer-email" checked>
+      📧 Envoyer les identifiants et la marche à suivre par e-mail
+    </label>
     <button class="btn-primary" id="user-create-btn" onclick="creerUtilisateur()">➕ Créer le compte</button>
     <div id="user-result" style="display:none;margin-top:14px;padding:14px;border-radius:10px;background:#ECFDF5;border:1px solid #6EE7B7;font-size:14px;"></div>
   </div>
@@ -694,7 +705,7 @@
   </div>
   <p id="users-search-count" style="font-size:13px;color:#6B7280;margin-bottom:12px;"></p>
 
-  <div class="table-wrapper" style="overflow-x:auto;">
+  <div class="table-wrapper" style="overflow:visible;">
     <table>
       <thead>
         <tr>
@@ -2668,12 +2679,13 @@ function togglePassword() {
     const fond = demande ? 'background:#FEF2F2;' : (raisons.length ? 'background:#FFF7ED;' : '');
     const opacite = u.actif || raisons.length ? '' : 'opacity:0.55;';
     const style = fond || opacite ? ` style="${fond}${opacite}"` : '';
-    // Raisons affichées sur une ligne pleine largeur, juste sous le compte
-    const ligneRaisons = raisons.length
-      ? `<tr style="${fond}"><td colspan="7" style="padding:0 16px 12px;border-bottom:1px solid #FDE2C8;font-size:12px;font-weight:600;color:${demande ? '#B91C1C' : '#C2410C'};">⚠️ À traiter : ${raisons.map(r => echapperHtml(r.texte)).join(' &nbsp;·&nbsp; ')}</td></tr>`
+    // Pastille « À traiter » : le détail s'affiche au survol (elle disparaît d'elle-même quand tout est réglé)
+    const pastille = raisons.length
+      ? `<div><span class="a-traiter${demande ? ' urgent' : ''}" tabindex="0">⚠️ À traiter${raisons.length > 1 ? ` (${raisons.length})` : ''}
+          <span class="infobulle">${raisons.map(r => echapperHtml(r.texte)).join('<br>')}</span></span></div>`
       : '';
     return `<tr${style}>
-        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}</td>
+        <td style="min-width:140px;"><strong>${nomComplet ? echapperHtml(nomComplet) : '<span style="color:#9CA3AF;">(non renseigné)</span>'}</strong>${estMoi ? ' <span class="badge badge-orange">vous · admin</span>' : ''}${pastille}</td>
         <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
@@ -2693,7 +2705,7 @@ function togglePassword() {
               : `<button class="btn-edit" style="background:#10B981;" onclick="actionUtilisateur('${u.id}', 'activer')" title="Débloquer la connexion">▶️ Activer</button>`}
             <button class="btn-danger" onclick="actionUtilisateur('${u.id}', 'supprimer')" title="Supprimer définitivement (la demande de suppression disparaît avec le compte)">🗑️</button>`}
         </td>
-      </tr>${ligneRaisons}`;
+      </tr>`;
   }
 
   /**
@@ -2755,14 +2767,21 @@ function togglePassword() {
  *   - titre (string) : texte d'introduction
  *   - email (string) : email du compte
  *   - motDePasse (string) : mot de passe provisoire
+ *   - emailEnvoye (boolean|null) : true = e-mail envoyé, false = échec (à transmettre à la main), null = pas d'envoi demandé
  * RETOURNE : rien
  * MODIFIE : contenu et affichage de #user-result
  */
-  function afficherIdentifiants(titre, email, motDePasse) {
+  function afficherIdentifiants(titre, email, motDePasse, emailEnvoye = null) {
     const box = document.getElementById('user-result');
+    const ligneEmail = emailEnvoye === true
+      ? `<div style="margin:8px 0;color:#065F46;font-weight:600;">📧 E-mail envoyé à ${echapperHtml(email)} avec les identifiants et la marche à suivre.</div>`
+      : emailEnvoye === false
+        ? `<div style="margin:8px 0;color:#B91C1C;font-weight:600;">⚠️ L'e-mail n'a pas pu être envoyé : transmettez ces identifiants vous-même.</div>`
+        : '';
     const texte = `Alliance Avantages — vos identifiants\nEmail : ${email}\nMot de passe provisoire : ${motDePasse}`;
     box.innerHTML = `
       <div style="font-weight:700;color:#065F46;margin-bottom:8px;">${echapperHtml(titre)}</div>
+      ${ligneEmail}
       <div>Email : <strong>${echapperHtml(email)}</strong></div>
       <div>Mot de passe provisoire : <strong style="font-family:monospace;font-size:16px;letter-spacing:1px;">${echapperHtml(motDePasse)}</strong></div>
       <div style="font-size:12px;color:#6B7280;margin-top:8px;">⚠️ Notez-le maintenant : il n'est conservé nulle part et ne sera plus affiché.</div>
@@ -2823,15 +2842,16 @@ function togglePassword() {
     const matricule = controle.matricule;
     const bouton = document.getElementById('user-create-btn');
     bouton.disabled = true; bouton.textContent = '⏳ Création...';
-    const res = await appelGestionUtilisateurs({ action: 'creer', prenom, nom, email, ville, matricule });
+    const envoyerEmail = document.getElementById('user-envoyer-email').checked;
+    const res = await appelGestionUtilisateurs({ action: 'creer', prenom, nom, email, ville, matricule, envoyerEmail });
     bouton.disabled = false; bouton.textContent = '➕ Créer le compte';
     if (res.erreur) {
       showAlert('❌ ' + res.erreur, 'error', 6000);
       return;
     }
     ['user-prenom', 'user-nom', 'user-email', 'user-ville', 'user-matricule'].forEach(id => document.getElementById(id).value = '');
-    afficherIdentifiants(`✅ Compte créé pour ${prenom} ${nom.toUpperCase()}`, res.email, res.motDePasse);
-    addLog('👤 Utilisateur créé', `${prenom} ${nom.toUpperCase()} (${res.email}) — matricule ${matricule}${ville ? ' — ' + ville : ''}`);
+    afficherIdentifiants(`✅ Compte créé pour ${prenom} ${nom.toUpperCase()}`, res.email, res.motDePasse, envoyerEmail ? res.emailEnvoye === true : null);
+    addLog('👤 Utilisateur créé', `${prenom} ${nom.toUpperCase()} (${res.email}) — matricule ${matricule}${ville ? ' — ' + ville : ''}${envoyerEmail ? (res.emailEnvoye ? ' — e-mail envoyé' : ' — e-mail NON envoyé') : ''}`);
     loadUsers();
   }
 
@@ -2983,8 +3003,8 @@ function togglePassword() {
     const questions = {
       desactiver: `Désactiver le compte de ${qui} ? Il ne pourra plus se connecter.`,
       activer: `Réactiver le compte de ${qui} ?`,
-      reinitialiser_mdp: `Créer un nouveau mot de passe provisoire pour ${qui} ? L'ancien ne fonctionnera plus.`,
-      supprimer: `Supprimer DÉFINITIVEMENT le compte de ${qui} ? Son profil et son historique de connexions seront effacés.`,
+      reinitialiser_mdp: `Créer un nouveau mot de passe provisoire pour ${qui} ? L'ancien ne fonctionnera plus.\n\n📧 Il lui sera envoyé par e-mail (${u.email}).`,
+      supprimer: `Supprimer DÉFINITIVEMENT le compte de ${qui} ? Son profil, son historique de connexions et ses messages seront effacés.\n\n📧 Un e-mail de confirmation lui sera envoyé (${u.email}).`,
     };
     if (!confirm(questions[action])) return;
     const res = await appelGestionUtilisateurs({ action, id });
@@ -2998,7 +3018,8 @@ function togglePassword() {
       reinitialiser_mdp: ['🔑 Mot de passe réinitialisé', qui],
       supprimer: ['🗑️ Utilisateur supprimé', `${qui} (${u.email})`],
     };
-    addLog(journal[action][0], journal[action][1]);
+    const noteEmail = ['reinitialiser_mdp', 'supprimer'].includes(action) ? (res.emailEnvoye ? ' — e-mail envoyé' : ' — e-mail NON envoyé') : '';
+    addLog(journal[action][0], journal[action][1] + noteEmail);
     // Nouveau mot de passe provisoire : l'utilisateur devra le remplacer à la prochaine ouverture
     if (action === 'reinitialiser_mdp' && Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer')) {
       await fetch(`${SUPABASE_URL}/rest/v1/profils?id=eq.${id}`, {
@@ -3007,7 +3028,8 @@ function togglePassword() {
         body: JSON.stringify({ mdp_a_changer: true }),
       }).catch(() => {});
     }
-    if (action === 'reinitialiser_mdp') afficherIdentifiants(`🔑 Nouveau mot de passe pour ${qui}`, u.email, res.motDePasse);
+    if (action === 'reinitialiser_mdp') afficherIdentifiants(`🔑 Nouveau mot de passe pour ${qui}`, u.email, res.motDePasse, res.emailEnvoye === true);
+    else if (action === 'supprimer') showAlert(res.emailEnvoye ? `✅ Compte supprimé — e-mail de confirmation envoyé à ${u.email}` : '✅ Compte supprimé — ⚠️ l\'e-mail de confirmation n\'a pas pu être envoyé', res.emailEnvoye ? 'success' : 'error', 6000);
     else showAlert('✅ ' + journal[action][0], 'success', 3000);
     loadUsers();
   }
