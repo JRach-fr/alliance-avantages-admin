@@ -336,7 +336,10 @@
   <div id="section-offers" class="section">
   <div class="section-header">
     <h2>Gestion des offres</h2>
-    <button class="btn-primary" onclick="ouvrirSousSectionOffres('add-offer')">➕ Nouvelle offre</button>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
+      <span id="offers-count" style="color:#6B7280;font-size:14px;"></span>
+      <button class="btn-primary" onclick="ouvrirSousSectionOffres('add-offer')">➕ Nouvelle offre</button>
+    </div>
   </div>
 
   <!-- Barre de recherche et filtres -->
@@ -497,7 +500,10 @@
 <div id="section-categories" class="section">
   <div class="section-header">
     <h2>Catégories</h2>
-    <button class="btn-primary" onclick="showAddCategory()">➕ Nouvelle catégorie</button>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
+      <span id="categories-count" style="color:#6B7280;font-size:14px;"></span>
+      <button class="btn-primary" onclick="showAddCategory()">➕ Nouvelle catégorie</button>
+    </div>
   </div>
 
   <!-- Formulaire ajout catégorie -->
@@ -3700,7 +3706,42 @@ function badgePerimee(offer) {
  * RETOURNE : rien
  * MODIFIE : contenu de #offers-table, texte de #search-count
  */
+/**
+ * FONCTION : majCompteurOffres
+ * DESCRIPTION : Résumé en haut de la section Offres : total (hors poubelle), actives, inactives
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : #offers-count
+ */
+function majCompteurOffres() {
+  const zone = document.getElementById('offers-count');
+  if (!zone || !Array.isArray(allOffers)) return;
+  const horsPoubelle = allOffers.filter(o => !o.deleted_at);
+  const actives = horsPoubelle.filter(o => o.active).length;
+  const inactives = horsPoubelle.length - actives;
+  zone.innerHTML = `${horsPoubelle.length} offre${horsPoubelle.length > 1 ? 's' : ''} · ${actives} active${actives > 1 ? 's' : ''} · `
+    + (inactives ? `<strong style="color:#C2410C;">${inactives} inactive${inactives > 1 ? 's' : ''}</strong>` : '0 inactive');
+}
+
+/**
+ * FONCTION : majCompteurCategories
+ * DESCRIPTION : Résumé en haut de la section Catégories : catégories (dont actives) et sous-catégories (dont actives)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : #categories-count
+ */
+function majCompteurCategories() {
+  const zone = document.getElementById('categories-count');
+  if (!zone || !Array.isArray(allCategories) || !Array.isArray(allSubcategories)) return;
+  const pluriel = n => (n > 1 ? 's' : '');
+  const catActives = allCategories.filter(c => c.active).length;
+  const sousActives = allSubcategories.filter(s => s.active !== false).length;
+  zone.textContent = `${allCategories.length} catégorie${pluriel(allCategories.length)} (${catActives} active${pluriel(catActives)}) · `
+    + `${allSubcategories.length} sous-catégorie${pluriel(allSubcategories.length)} (${sousActives} active${pluriel(sousActives)})`;
+}
+
 function filterOffers() {
+  majCompteurOffres();
   const query = document.getElementById('search-offers').value.toLowerCase().trim();
   const categoryFilter = document.getElementById('filter-category').value;
   const subcatEl = document.getElementById('filter-subcategory');
@@ -4466,6 +4507,11 @@ console.log('Sont différentes:', oldOffer?.image_url !== newImageUrl);
  */
 async function loadCategories() {
   allCategories = await supabaseQuery('categories', { select: '*', order: 'position' });
+  // Sous-catégories : normalement déjà chargées au démarrage, sinon on les lit pour le compteur
+  if (!Array.isArray(allSubcategories) || !allSubcategories.length) {
+    const sous = await supabaseQuery('subcategories', { select: '*', order: 'position' });
+    if (Array.isArray(sous)) allSubcategories = sous;
+  }
   const tbody = document.getElementById('categories-table');
   tbody.innerHTML = allCategories.map(cat => `<tr>
     <td style="font-size:24px;">${cat.icon}</td>
@@ -4483,6 +4529,7 @@ async function loadCategories() {
       <button class="btn-danger" onclick="deleteCategory('${cat.id}')">🗑️</button>
     </td>
   </tr>`).join('');
+  majCompteurCategories();
 }
 
 /**
@@ -4735,6 +4782,7 @@ async function addSubcategory() {
     document.getElementById('new-subcat-icon').value = '';
     document.getElementById('add-subcategory-form').style.display = 'none';
     allSubcategories = await supabaseQuery('subcategories', { select: '*', order: 'position' });
+    majCompteurCategories();
     loadSubcategories(currentCategoryId);
   } else {
     showAlert('Erreur lors de l\'ajout', 'error');
@@ -4821,6 +4869,7 @@ const ok = await supabaseUpdate('subcategories', id, { label, icon: icon || '�
     addLog('✏️ Modification sous-catégorie', `"${label}" — position: ${oldPosition} → ${position}`);
     closeEditSubcategory();
     allSubcategories = await supabaseQuery('subcategories', { select: '*', order: 'position' });
+    majCompteurCategories();
     loadSubcategories(currentCategoryId);
   } else {
     showAlert('❌ Erreur lors de la modification', 'error', 0);
@@ -4844,6 +4893,7 @@ async function deleteSubcategory(id) {
     showAlert('Sous-catégorie supprimée !', 'success');
     addLog('🗑️ Suppression sous-catégorie', sub ? `"${sub.label}"${cat ? ` (${cat.label})` : ''}` : `ID: ${id}`);
     allSubcategories = await supabaseQuery('subcategories', { select: '*', order: 'position' });
+    majCompteurCategories();
     loadSubcategories(currentCategoryId);
   } else {
     showAlert('Erreur lors de la suppression', 'error');
