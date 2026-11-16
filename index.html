@@ -3725,7 +3725,7 @@ function majCompteurOffres() {
 
 /**
  * FONCTION : majCompteurCategories
- * DESCRIPTION : Résumé en haut de la section Catégories : catégories (dont actives) et sous-catégories (dont actives)
+ * DESCRIPTION : Résumé en haut de la section Catégories : catégories et sous-catégories, avec le nombre d'inactives
  * PARAMÈTRES : aucun
  * RETOURNE : rien
  * MODIFIE : #categories-count
@@ -3734,10 +3734,12 @@ function majCompteurCategories() {
   const zone = document.getElementById('categories-count');
   if (!zone || !Array.isArray(allCategories) || !Array.isArray(allSubcategories)) return;
   const pluriel = n => (n > 1 ? 's' : '');
-  const catActives = allCategories.filter(c => c.active).length;
-  const sousActives = allSubcategories.filter(s => s.active !== false).length;
-  zone.textContent = `${allCategories.length} catégorie${pluriel(allCategories.length)} (${catActives} active${pluriel(catActives)}) · `
-    + `${allSubcategories.length} sous-catégorie${pluriel(allSubcategories.length)} (${sousActives} active${pluriel(sousActives)})`;
+  const catInactives = allCategories.filter(c => !c.active).length;
+  const sousInactives = allSubcategories.filter(s => s.active === false).length;
+  // Nombre d'inactives mis en évidence (même couleur que dans Offres) quand il y en a
+  const inactives = n => n ? `<strong style="color:#C2410C;">${n} inactive${pluriel(n)}</strong>` : '0 inactive';
+  zone.innerHTML = `${allCategories.length} catégorie${pluriel(allCategories.length)} (${inactives(catInactives)}) · `
+    + `${allSubcategories.length} sous-catégorie${pluriel(allSubcategories.length)} (${inactives(sousInactives)})`;
 }
 
 function filterOffers() {
