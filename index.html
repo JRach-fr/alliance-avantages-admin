@@ -637,11 +637,19 @@
 <div id="section-users" class="section">
   <div class="section-header">
     <h2>👥 Utilisateurs</h2>
-    <span id="users-count" style="color:#6B7280;font-size:14px;"></span>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
+      <span id="users-count" style="color:#6B7280;font-size:14px;"></span>
+      <button class="btn-primary" onclick="afficherFormulaireUtilisateur()">➕ Nouveau compte</button>
+    </div>
   </div>
 
+  <!-- Identifiants à transmettre (après une création ou un nouveau mot de passe) : visible même formulaire fermé -->
+  <div id="user-result" style="display:none;margin-bottom:20px;padding:14px;border-radius:10px;background:#ECFDF5;border:1px solid #6EE7B7;font-size:14px;"></div>
+
+  <!-- Formulaire de création de compte : caché, ouvert par « Nouveau compte » (même principe que Catégories) -->
+  <div id="add-user-form" style="display:none;margin-bottom:20px;">
   <div class="form-card">
-    <h3>Créer un compte</h3>
+    <h3>Nouveau compte</h3>
     <div class="form-grid">
       <div class="form-group">
         <label>Prénom *</label>
@@ -674,8 +682,11 @@
       <input type="checkbox" id="user-envoyer-email" checked>
       📧 Envoyer les identifiants et la marche à suivre par e-mail
     </label>
-    <button class="btn-primary" id="user-create-btn" onclick="creerUtilisateur()">➕ Créer le compte</button>
-    <div id="user-result" style="display:none;margin-top:14px;padding:14px;border-radius:10px;background:#ECFDF5;border:1px solid #6EE7B7;font-size:14px;"></div>
+    <div class="form-actions">
+      <button class="btn-primary" id="user-create-btn" onclick="creerUtilisateur()">➕ Créer le compte</button>
+      <button onclick="fermerFormulaireUtilisateur()" style="background:#6B7280;color:white;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-size:14px;">Annuler</button>
+    </div>
+  </div>
   </div>
 
   <!-- Recherche et filtres des comptes (les comptes « à traiter » sont toujours affichés en premier) -->
@@ -693,8 +704,8 @@
     </select>
     <select id="filtre-users-activite" onchange="filtrerUtilisateurs()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
       <option value="">Toute activité</option>
-      <option value="actifs30">Connectés ces 30 derniers jours</option>
-      <option value="inactifs30">Inactifs depuis plus de 30 jours</option>
+      <option value="actifs30">Actifs (30 j)</option>
+      <option value="inactifs30">Inactifs (+30 j)</option>
       <option value="jamais">Jamais connectés</option>
     </select>
     <select id="filtre-users-version" onchange="filtrerUtilisateurs()" style="padding:10px 14px;border:1px solid #E5E7EB;border-radius:8px;font-size:14px;">
@@ -2770,6 +2781,35 @@ function togglePassword() {
   }
 
   /**
+ * FONCTION : afficherFormulaireUtilisateur
+ * DESCRIPTION : Ouvre ou referme le formulaire « Nouveau compte » au-dessus de la liste
+ *               (la liste glisse en dessous, comme dans Catégories)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : affichage de #add-user-form, focus sur le prénom
+ */
+  function afficherFormulaireUtilisateur() {
+    const form = document.getElementById('add-user-form');
+    if (form.style.display !== 'none') { fermerFormulaireUtilisateur(); return; }
+    form.style.display = 'block';
+    document.getElementById('user-prenom').focus();
+  }
+
+  /**
+ * FONCTION : fermerFormulaireUtilisateur
+ * DESCRIPTION : Referme le formulaire « Nouveau compte » et vide ses champs
+ *               (la case « envoyer par e-mail » revient cochée)
+ * PARAMÈTRES : aucun
+ * RETOURNE : rien
+ * MODIFIE : affichage et champs de #add-user-form
+ */
+  function fermerFormulaireUtilisateur() {
+    document.getElementById('add-user-form').style.display = 'none';
+    ['user-prenom', 'user-nom', 'user-email', 'user-ville', 'user-matricule'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('user-envoyer-email').checked = true;
+  }
+
+  /**
  * FONCTION : afficherIdentifiants
  * DESCRIPTION : Affiche l'email et le mot de passe provisoire à transmettre à l'utilisateur,
  *               avec un bouton pour tout copier (le mot de passe n'est stocké nulle part)
@@ -2859,7 +2899,7 @@ function togglePassword() {
       showAlert('❌ ' + res.erreur, 'error', 6000);
       return;
     }
-    ['user-prenom', 'user-nom', 'user-email', 'user-ville', 'user-matricule'].forEach(id => document.getElementById(id).value = '');
+    fermerFormulaireUtilisateur();
     afficherIdentifiants(`✅ Compte créé pour ${prenom} ${nom.toUpperCase()}`, res.email, res.motDePasse, envoyerEmail ? res.emailEnvoye === true : null);
     addLog('👤 Utilisateur créé', `${prenom} ${nom.toUpperCase()} (${res.email}) — matricule ${matricule}${ville ? ' — ' + ville : ''}${envoyerEmail ? (res.emailEnvoye ? ' — e-mail envoyé' : ' — e-mail NON envoyé') : ''}`);
     loadUsers();
