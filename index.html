@@ -747,7 +747,7 @@
         <p id="user-edit-mdp-aide" style="display:none;font-size:12px;color:#6B7280;margin:6px 0 0 28px;">
           Décocher pour un compte de démonstration (ex. compte de test Google), dont le mot de passe ne doit pas changer.
         </p>
-        <button class="btn-primary" style="margin-top:14px;" onclick="enregistrerFicheUtilisateur()">💾 Enregistrer les informations</button>
+        <button id="user-fiche-enregistrer" class="btn-primary" style="margin-top:14px;" onclick="enregistrerFicheUtilisateur()">💾 Enregistrer les informations</button>
       </div>
       <!-- Parcours d'accès -->
       <div>
@@ -3083,6 +3083,14 @@ function togglePassword() {
       ${badgeEtatCompte(u)}`;
     document.getElementById('user-edit-id').value = u.id;
     document.getElementById('user-edit-email').textContent = u.email || '';
+    // Fiche du super administrateur : lecture seule pour les autres administrateurs (verrou aussi dans la base)
+    const ficheVerrouillee = estSuperAdminCompte && !estMoi;
+    ['user-edit-prenom', 'user-edit-nom', 'user-edit-ville', 'user-edit-matricule', 'user-edit-mdp'].forEach(idChamp => {
+      const champ = document.getElementById(idChamp);
+      if (champ) champ.disabled = ficheVerrouillee;
+    });
+    const boutonEnregistrer = document.getElementById('user-fiche-enregistrer');
+    if (boutonEnregistrer) boutonEnregistrer.style.display = ficheVerrouillee ? 'none' : '';
     // Adresse modifiable sauf pour son propre compte et le super administrateur (protégés côté serveur aussi)
     const emailModifiable = !estMoi && !estSuperAdminCompte && !u.protege && !u.suppression_prevue_le;
     document.getElementById('user-email-modifier').style.display = emailModifiable ? 'inline-block' : 'none';
@@ -3133,8 +3141,8 @@ function togglePassword() {
         <button class="btn-danger" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'supprimer_definitif')">🗑️ Supprimer définitivement maintenant</button>`);
     } else if (!estMoi && !estSuperAdminCompte && u.protege) {
       // Compte protégé : aucune action sensible tant que la protection est active
-      actions.push(`<span style="font-size:13px;color:#1E40AF;">🔒 Compte protégé : suppression, désactivation, changement d'adresse ou de mot de passe impossibles.</span>`);
-      actions.push(`<span style="flex:1;"></span>
+      actions.push(`<span style="font-size:13px;color:#1E40AF;">🔒 ${estAdminCompte ? 'Compte administrateur protégé' : 'Compte protégé'} : suppression, désactivation, changement d'adresse ou de mot de passe impossibles.${estAdminCompte && !moiSuperAdmin ? '<br>Seul le super administrateur peut retirer cette protection.' : ''}</span>`);
+      if (!estAdminCompte || moiSuperAdmin) actions.push(`<span style="flex:1;"></span>
         <button class="btn-edit" style="padding:10px 14px;font-size:13px;background:#6B7280;" onclick="actionUtilisateur('${u.id}', 'deproteger')">🔓 Retirer la protection</button>`);
     } else if (!estMoi && !estSuperAdminCompte) {
       actions.push(`<button class="btn-edit" style="padding:10px 14px;font-size:13px;${u.mdp_a_changer === true ? 'background:#FF6B00;' : ''}" onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')">🔑 Nouveau mot de passe provisoire</button>`);
@@ -3150,7 +3158,7 @@ function togglePassword() {
           <button class="btn-danger" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'supprimer')">🗑️ Supprimer le compte</button>
         </div>`);
     } else {
-      actions.push(`<span style="font-size:13px;color:#6B7280;">${estSuperAdminCompte && !estMoi ? '👑 Compte super administrateur : protégé, aucune action possible.' : 'Votre propre compte : seules les informations sont modifiables ici.'}</span>`);
+      actions.push(`<span style="font-size:13px;color:#6B7280;">${estSuperAdminCompte && !estMoi ? '👑 Compte super administrateur : protégé en permanence, fiche en lecture seule. Aucune action possible.' : 'Votre propre compte : seules les informations sont modifiables ici.'}</span>`);
     }
     document.getElementById('user-fiche-actions').innerHTML = actions.join('');
   }
