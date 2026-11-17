@@ -1002,11 +1002,20 @@
   <!-- Sauvegarde -->
   <div class="form-card" style="border-bottom-color:#10B981;">
     <h3>💾 Sauvegarde</h3>
+    <p style="font-size:13px;color:#6B7280;margin-bottom:8px;">
+      La <strong>base complète</strong> (offres, comptes, images, réglages) est sauvegardée automatiquement
+      <strong>chaque nuit sur GitHub</strong>, chiffrée, et gardée 30 jours.
+    </p>
     <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">
-      Exportez vos données pour les sauvegarder ou les restaurer en cas de problème.
+      Le bouton « Exporter les offres » télécharge seulement une <strong>copie rapide des offres et des catégories</strong>
+      (fichier SQL lisible, sans données personnelles), utile avant une grosse modification.
     </p>
     <div class="form-actions">
-      <button class="btn-primary" onclick="exportSQL()">📥 Exporter la base SQL</button>
+      <button class="btn-primary" onclick="exportSQL()">📥 Exporter les offres</button>
+      <a href="https://github.com/JRach-fr/alliance-avantages-app/actions/workflows/sauvegarde-base.yml" target="_blank" rel="noopener"
+         style="display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border:1px solid #003189;border-radius:8px;color:#003189;background:white;font-size:14px;font-weight:600;text-decoration:none;">
+        Voir les sauvegardes de nuit ↗
+      </a>
     </div>
   </div>
 
@@ -5699,7 +5708,8 @@ function sqlInsertRow(table, row) {
 
 /**
  * FONCTION : exportSQL
- * DESCRIPTION : Exporte toutes les offres et catégories en format SQL téléchargeable
+ * DESCRIPTION : Exporte les offres, catégories et sous-catégories en format SQL téléchargeable
+ *               (copie rapide ; la sauvegarde complète est celle de nuit, sur GitHub)
  * PARAMÈTRES : aucun
  * RETOURNE : rien
  * MODIFIE : déclenche un téléchargement de fichier .sql, ajoute une ligne au journal (logs)
