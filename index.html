@@ -2571,6 +2571,22 @@ function togglePassword() {
   }
 
   /**
+ * FONCTION : badgeEtatCompte
+ * DESCRIPTION : Pastilles d'état d'un compte : Actif / Désactivé / Suppression programmée, et 🔒 Protégé
+ * PARAMÈTRES :
+ *   - u (object) : profil
+ * RETOURNE : string — HTML des pastilles
+ * MODIFIE : rien
+ */
+  function badgeEtatCompte(u) {
+    const etat = u.suppression_prevue_le
+      ? `<span class="badge badge-red" title="Compte bloqué : supprimé définitivement à cette date, sauf annulation">🗑️ Suppression le ${new Date(u.suppression_prevue_le).toLocaleDateString('fr-FR')}</span>`
+      : (u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>');
+    const protection = u.protege ? ' <span class="badge" style="background:#DBEAFE;color:#1E40AF;" title="Ni suppression, ni désactivation, ni changement d\'adresse ou de mot de passe">🔒 Protégé</span>' : '';
+    return etat + protection;
+  }
+
+  /**
  * FONCTION : raisonsATraiter
  * DESCRIPTION : Liste les raisons pour lesquelles un compte demande une intervention de l'admin,
  *               de la plus urgente à la moins urgente
@@ -2582,6 +2598,8 @@ function togglePassword() {
  */
   function raisonsATraiter(u) {
     const raisons = [];
+    // Suppression déjà programmée : la demande est prise en charge, rien d'autre à faire
+    if (u.suppression_prevue_le) return raisons;
     const demande = demandesSuppression.find(d => d.user_id === u.id);
     if (demande) {
       const limite = dateLimiteSuppression(demande);
@@ -2756,7 +2774,7 @@ function togglePassword() {
         <td>${echapperHtml(u.email)}<div style="font-size:11px;color:#9CA3AF;margin-top:4px;">créé le ${formaterDateHeure(u.created_at).split(' ')[0]}</div></td>
         <td>${u.ville ? echapperHtml(u.ville) : '—'}</td>
         <td>${u.matricule ? `<code>${echapperHtml(u.matricule)}</code>` : '<span class="badge badge-red">à compléter</span>'}</td>
-        <td>${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}
+        <td>${badgeEtatCompte(u)}
           <div style="font-size:11px;margin-top:4px;white-space:nowrap;" title="Information « Données personnelles » acceptée dans l'application">${u.information_lue_le
             ? `<span style="color:#16A34A;">🛡️ Info lue le ${formaterDateHeure(u.information_lue_le).split(' ')[0]}</span>`
             : '<span style="color:#C2410C;">🛡️ Info non lue</span>'}</div></td>
@@ -3062,11 +3080,11 @@ function togglePassword() {
     const badge = estSuperAdminCompte ? ' <span class="badge badge-orange">👑 super admin</span>'
       : (estAdminCompte ? ' <span class="badge badge-orange">🛡️ admin</span>' : '');
     document.getElementById('user-fiche-titre').innerHTML = `👤 ${echapperHtml(nom)}${estMoi ? ' <span class="badge badge-orange">vous</span>' : ''}${badge}
-      ${u.actif ? '<span class="badge badge-green">Actif</span>' : '<span class="badge badge-red">Désactivé</span>'}`;
+      ${badgeEtatCompte(u)}`;
     document.getElementById('user-edit-id').value = u.id;
     document.getElementById('user-edit-email').textContent = u.email || '';
     // Adresse modifiable sauf pour son propre compte et le super administrateur (protégés côté serveur aussi)
-    const emailModifiable = !estMoi && !estSuperAdminCompte;
+    const emailModifiable = !estMoi && !estSuperAdminCompte && !u.protege && !u.suppression_prevue_le;
     document.getElementById('user-email-modifier').style.display = emailModifiable ? 'inline-block' : 'none';
     document.getElementById('user-email-fixe').style.display = emailModifiable ? 'none' : 'inline';
     fermerChangementEmail();
@@ -3105,12 +3123,26 @@ function togglePassword() {
     // Actions
     const actions = [];
     if (demande) actions.push(`<button class="btn-edit" style="background:#16A34A;padding:10px 14px;font-size:13px;" onclick="marquerDemandeTraitee(${Number(demande.id)}, '${u.id}')" title="Demande de test ou annulée par l'utilisateur. Pour supprimer le compte, utiliser « Supprimer le compte »">✓ Demande de suppression traitée</button>`);
-    if (!estMoi && !estSuperAdminCompte) {
+    if (!estMoi && !estSuperAdminCompte && u.suppression_prevue_le) {
+      // Suppression programmée : seulement annuler, ou supprimer tout de suite
+      actions.push(`<div style="flex-basis:100%;padding:10px 14px;border-radius:10px;background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;font-size:13px;">
+          🗑️ <strong>Suppression programmée le ${new Date(u.suppression_prevue_le).toLocaleDateString('fr-FR')}</strong> : le compte est bloqué
+          et la personne a été prévenue. Vous pouvez encore annuler d'ici là.</div>`);
+      actions.push(`<button class="btn-edit" style="background:#16A34A;padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'annuler_suppression')">↩️ Annuler la suppression</button>`);
+      actions.push(`<span style="flex:1;"></span>
+        <button class="btn-danger" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'supprimer_definitif')">🗑️ Supprimer définitivement maintenant</button>`);
+    } else if (!estMoi && !estSuperAdminCompte && u.protege) {
+      // Compte protégé : aucune action sensible tant que la protection est active
+      actions.push(`<span style="font-size:13px;color:#1E40AF;">🔒 Compte protégé : suppression, désactivation, changement d'adresse ou de mot de passe impossibles.</span>`);
+      actions.push(`<span style="flex:1;"></span>
+        <button class="btn-edit" style="padding:10px 14px;font-size:13px;background:#6B7280;" onclick="actionUtilisateur('${u.id}', 'deproteger')">🔓 Retirer la protection</button>`);
+    } else if (!estMoi && !estSuperAdminCompte) {
       actions.push(`<button class="btn-edit" style="padding:10px 14px;font-size:13px;${u.mdp_a_changer === true ? 'background:#FF6B00;' : ''}" onclick="actionUtilisateur('${u.id}', 'reinitialiser_mdp')">🔑 Nouveau mot de passe provisoire</button>`);
       actions.push(u.actif
         ? `<button class="btn-orange" style="padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'desactiver')">⏸️ Désactiver le compte</button>`
         : `<button class="btn-edit" style="background:#10B981;padding:10px 14px;font-size:13px;" onclick="actionUtilisateur('${u.id}', 'activer')">▶️ Activer le compte</button>`);
       if (u.email) actions.push(`<a class="btn-edit" style="padding:10px 14px;font-size:13px;text-decoration:none;display:inline-block;" href="mailto:${encodeURIComponent(u.email)}?subject=${encodeURIComponent('Alliance Avantages')}">✉️ Écrire un e-mail</a>`);
+      actions.push(`<button class="btn-edit" style="padding:10px 14px;font-size:13px;background:#1E40AF;" onclick="actionUtilisateur('${u.id}', 'proteger')" title="Empêche la suppression, la désactivation et le changement d'adresse ou de mot de passe (ex. compte de test Google)">🔒 Protéger le compte</button>`);
       // Actions sensibles, à part sur la droite : droits admin (super admin uniquement) au-dessus de la suppression
       actions.push(`<span style="flex:1;"></span>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:stretch;">
@@ -3185,12 +3217,14 @@ function togglePassword() {
 
   /**
  * FONCTION : actionUtilisateur
- * DESCRIPTION : Désactive, active, réinitialise le mot de passe ou supprime un compte
- *               (avec confirmation), via la fonction serveur ; après une réinitialisation,
- *               remet l'obligation de changer le mot de passe (profils.mdp_a_changer = true)
+ * DESCRIPTION : Actions sur un compte, avec confirmation, via la fonction serveur : désactiver, activer,
+ *               nouveau mot de passe, suppression PROGRAMMÉE (compte bloqué, supprimé dans 7 jours),
+ *               annulation de la suppression, suppression définitive immédiate et retrait de protection
+ *               (ces deux-là exigent de retaper le nom du compte), protection du compte
  * PARAMÈTRES :
  *   - id (string) : identifiant du compte
- *   - action (string) : 'desactiver' | 'activer' | 'reinitialiser_mdp' | 'supprimer'
+ *   - action (string) : 'desactiver' | 'activer' | 'reinitialiser_mdp' | 'supprimer' | 'annuler_suppression'
+ *                       | 'supprimer_definitif' | 'proteger' | 'deproteger'
  * RETOURNE : Promise<void>
  * MODIFIE : compte Supabase Auth, profil, liste, journal
  */
@@ -3202,22 +3236,44 @@ function togglePassword() {
       desactiver: `Désactiver le compte de ${qui} ? Il ne pourra plus se connecter.`,
       activer: `Réactiver le compte de ${qui} ?`,
       reinitialiser_mdp: `Créer un nouveau mot de passe provisoire pour ${qui} ? L'ancien ne fonctionnera plus.\n\n📧 Il lui sera envoyé par e-mail (${u.email}).`,
-      supprimer: `Supprimer DÉFINITIVEMENT le compte de ${qui} ? Son profil, son historique de connexions et ses messages seront effacés.\n\n📧 Un e-mail de confirmation lui sera envoyé (${u.email}).`,
+      supprimer: `Supprimer le compte de ${qui} ?\n\n🔒 Le compte est bloqué tout de suite (plus de connexion possible).\n🗑️ Il sera supprimé définitivement dans 7 jours, avec toutes ses données.\n↩️ D'ici là, vous pourrez annuler depuis sa fiche.\n\n📧 La personne est prévenue par e-mail (${u.email}).`,
+      annuler_suppression: `Annuler la suppression du compte de ${qui} ?\n\nLe compte est rétabli tel qu'il était (mêmes identifiants).\n📧 La personne est prévenue par e-mail.`,
+      proteger: `Protéger le compte de ${qui} ?\n\nIl ne pourra plus être supprimé, désactivé, ni changer d'adresse ou de mot de passe tant que la protection est active.`,
     };
-    if (!confirm(questions[action])) return;
-    const res = await appelGestionUtilisateurs({ action, id });
+    const corps = { action, id };
+    if (action === 'supprimer_definitif' || action === 'deproteger') {
+      // Actions irréversibles ou levée de protection : il faut retaper le nom du compte
+      const texte = action === 'supprimer_definitif'
+        ? `⚠️ SUPPRESSION DÉFINITIVE ET IMMÉDIATE du compte de ${qui} : profil, historique de connexions et messages. Impossible d'annuler.\n\nPour confirmer, tapez le prénom et le nom du compte :\n${qui}`
+        : `Retirer la protection du compte de ${qui} ?\n\nPour confirmer, tapez le prénom et le nom du compte :\n${qui}`;
+      const saisie = prompt(texte);
+      if (saisie === null) return;
+      const simplifier = t => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (simplifier(saisie) !== simplifier(qui) && simplifier(saisie) !== simplifier(u.email)) {
+        showAlert('❌ Le nom tapé ne correspond pas : rien n\'a été fait', 'error', 6000);
+        return;
+      }
+      if (action === 'supprimer_definitif') { corps.action = 'supprimer'; corps.immediat = true; }
+      else { corps.action = 'proteger'; corps.protege = false; corps.confirmation = saisie; }
+    } else {
+      if (!confirm(questions[action])) return;
+      if (action === 'proteger') corps.protege = true;
+    }
+    const res = await appelGestionUtilisateurs(corps);
     if (res.erreur) {
-      showAlert('❌ ' + res.erreur, 'error', 6000);
+      showAlert('❌ ' + res.erreur, 'error', 0);
       return;
     }
+    // Le journal est rempli par le serveur pour la suppression, l'annulation et la protection
     const journal = {
       desactiver: ['⏸️ Utilisateur désactivé', qui],
       activer: ['▶️ Utilisateur réactivé', qui],
       reinitialiser_mdp: ['🔑 Mot de passe réinitialisé', qui],
-      supprimer: ['🗑️ Utilisateur supprimé', `${qui} (${u.email})`],
     };
-    const noteEmail = ['reinitialiser_mdp', 'supprimer'].includes(action) ? (res.emailEnvoye ? ' — e-mail envoyé' : ' — e-mail NON envoyé') : '';
-    addLog(journal[action][0], journal[action][1] + noteEmail);
+    if (journal[action]) {
+      const noteEmail = action === 'reinitialiser_mdp' ? (res.emailEnvoye ? ' — e-mail envoyé' : ' — e-mail NON envoyé') : '';
+      addLog(journal[action][0], journal[action][1] + noteEmail);
+    }
     // Nouveau mot de passe provisoire : l'utilisateur devra le remplacer à la prochaine ouverture
     if (action === 'reinitialiser_mdp' && Object.prototype.hasOwnProperty.call(u, 'mdp_a_changer')) {
       await fetch(`${SUPABASE_URL}/rest/v1/profils?id=eq.${id}`, {
@@ -3226,8 +3282,13 @@ function togglePassword() {
         body: JSON.stringify({ mdp_a_changer: true }),
       }).catch(() => {});
     }
+    const mail = res.emailEnvoye ? ` — e-mail envoyé à ${u.email}` : ' — ⚠️ l\'e-mail n\'a pas pu être envoyé';
     if (action === 'reinitialiser_mdp') afficherIdentifiants(`🔑 Nouveau mot de passe pour ${qui}`, u.email, res.motDePasse, res.emailEnvoye === true);
-    else if (action === 'supprimer') showAlert(res.emailEnvoye ? `✅ Compte supprimé — e-mail de confirmation envoyé à ${u.email}` : '✅ Compte supprimé — ⚠️ l\'e-mail de confirmation n\'a pas pu être envoyé', res.emailEnvoye ? 'success' : 'error', 6000);
+    else if (action === 'supprimer') showAlert(`✅ Suppression programmée le ${new Date(res.suppressionPrevueLe).toLocaleDateString('fr-FR')} : compte bloqué${mail}`, res.emailEnvoye ? 'success' : 'error', 8000);
+    else if (action === 'supprimer_definitif') { showAlert('✅ Compte supprimé définitivement' + (res.emailEnvoye ? mail : ''), 'success', 6000); fermerFicheUtilisateur(); }
+    else if (action === 'annuler_suppression') showAlert(`✅ Suppression annulée : compte rétabli${res.actif ? '' : ' (reste désactivé, comme avant)'}${mail}`, 'success', 8000);
+    else if (action === 'proteger') showAlert('✅ Compte protégé 🔒', 'success', 4000);
+    else if (action === 'deproteger') showAlert('✅ Protection retirée 🔓', 'success', 4000);
     else showAlert('✅ ' + journal[action][0], 'success', 3000);
     loadUsers();
   }
