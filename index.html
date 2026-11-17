@@ -3135,7 +3135,7 @@ function togglePassword() {
     if (colonneMdp) donnees.mdp_a_changer = mdpAChanger;
     const res = await fetch(`${SUPABASE_URL}/rest/v1/profils?id=eq.${id}`, {
       method: 'PATCH',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${jetonSession()}`, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
       body: JSON.stringify(donnees),
     });
     if (!res.ok) {
@@ -3145,10 +3145,20 @@ function togglePassword() {
       showAlert('❌ ' + (doublon ? 'Ce matricule est déjà utilisé par un autre compte' : (message || 'Enregistrement impossible')), 'error', 6000);
       return;
     }
+    // Aucune ligne modifiée = refus silencieux (session expirée, droits) : on le dit au lieu d'afficher un faux succès
+    const lignes = await res.json().catch(() => []);
+    if (!Array.isArray(lignes) || !lignes.length) {
+      showAlert('❌ Modification non enregistrée : reconnectez-vous puis réessayez', 'error', 0);
+      return;
+    }
     const changements = Object.keys(donnees).filter(k => k !== 'mdp_a_changer' && (u?.[k] || '') !== (donnees[k] || '')).map(k => `${k} : ${u?.[k] || '—'} → ${donnees[k] || '—'}`);
     if (colonneMdp && u.mdp_a_changer !== mdpAChanger) changements.push(`changement de mot de passe obligatoire : ${mdpAChanger ? 'oui' : 'non'}`);
-    if (changements.length) addLog('✏️ Utilisateur modifié', `${donnees.prenom} ${donnees.nom} — ${changements.join(', ')}`);
-    showAlert('✅ Informations enregistrées', 'success', 3000);
+    if (changements.length) {
+      addLog('✏️ Utilisateur modifié', `${donnees.prenom} ${donnees.nom} — ${changements.join(', ')}`);
+      showAlert(`✅ Modification enregistrée : fiche de ${donnees.prenom} ${donnees.nom} mise à jour`, 'success', 5000);
+    } else {
+      showAlert('ℹ️ Aucune modification : la fiche était déjà à jour', 'success', 4000);
+    }
     loadUsers();
   }
 
