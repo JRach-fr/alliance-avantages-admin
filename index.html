@@ -1046,18 +1046,29 @@
   <p style="font-size:13px;color:#6B7280;margin-bottom:16px;">
     Historique des 500 dernières actions effectuées dans l'interface admin.
   </p>
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+    <input
+      type="text"
+      id="search-logs"
+      placeholder="🔍 Rechercher : action, détail, admin, origine, date..."
+      oninput="filtrerLogs()"
+      style="flex:1;padding:10px 14px;border:1px solid #003189;border-radius:8px;font-size:14px;min-width:200px;">
+    <span id="logs-count" style="font-size:13px;color:#6B7280;"></span>
+  </div>
   <div class="table-wrapper">
     <table>
       <thead>
         <tr>
           <th>Date</th>
           <th>Heure</th>
+          <th>Origine</th>
+          <th>Admin</th>
           <th>Action</th>
           <th>Détail</th>
         </tr>
       </thead>
       <tbody id="logs-table">
-        <tr><td colspan="4" class="loading">Chargement...</td></tr>
+        <tr><td colspan="6" class="loading">Chargement...</td></tr>
       </tbody>
     </table>
   </div>
@@ -3710,7 +3721,7 @@ function togglePassword() {
     tbody.innerHTML = horsPoubelle.slice(0, 10).map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
       return `<tr${styleLigneOffre(o)} class="ligne-cliquable" onclick="openOfferPreview('${o.id}')" title="Voir l'aperçu de l'offre">
-        <td><strong style="color:#003189;">${o.title}</strong>${badgePerimee(o)}</td>
+        <td><strong style="color:#003189;">${o.title}</strong>${badgePerimee(o)}${badgeTelephone(o)}</td>
         <td>${o.partner_name}</td>
         <td>${cat ? cat.icon + ' ' + cat.label : '-'}</td>
         <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
@@ -3909,7 +3920,7 @@ function togglePassword() {
     tbody.innerHTML = allOffers.map(o => {
       const cat = allCategories.find(c => c.id === o.category_id);
       return `<tr${styleLigneOffre(o)}>
-        <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${badgePerimee(o)}</td>
+        <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${badgePerimee(o)}${badgeTelephone(o)}</td>
         <td>${o.partner_name}</td>
         <td>${o.city || '-'}</td>
         <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
@@ -4085,6 +4096,20 @@ function badgePerimee(offer) {
 }
 
  /**
+ * FONCTION : badgeTelephone
+ * DESCRIPTION : Icône 📱 affichée à côté du titre d'une offre ajoutée depuis le téléphone
+ *               (origine = 'telephone')
+ * PARAMÈTRES :
+ *   - offer (object) : offre issue de la table offers
+ * RETOURNE : string - HTML du badge (chaîne vide pour les autres offres)
+ * MODIFIE : rien
+ */
+function badgeTelephone(offer) {
+  if (offer.origine !== 'telephone') return '';
+  return ' <span title="Offre ajoutée depuis le téléphone" style="font-size:15px;cursor:help;">📱</span>';
+}
+
+ /**
  * FONCTION : filterOffers
  * DESCRIPTION : Filtre la liste des offres en temps réel selon la recherche et les filtres
  *               Appelée à chaque frappe dans la barre de recherche ou changement de filtre
@@ -4184,7 +4209,7 @@ function filterOffers() {
   tbody.innerHTML = filtered.map(o => {
     const cat = allCategories.find(c => c.id === o.category_id);
     return `<tr${styleLigneOffre(o)}>
-      <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${badgePerimee(o)}${cat ? `<br><small style="color:#9CA3AF;">${cat.icon} ${cat.label}</small>` : ''}</td>      <td>${o.partner_name}</td>
+      <td><strong style="cursor:pointer;color:#003189;" onclick="openOfferPreview('${o.id}')">${o.title}</strong>${badgePerimee(o)}${badgeTelephone(o)}${cat ? `<br><small style="color:#9CA3AF;">${cat.icon} ${cat.label}</small>` : ''}</td>      <td>${o.partner_name}</td>
       <td>${o.city || '-'}</td>
       <td>${o.discount ? `<span class="badge badge-orange">${o.discount}</span>` : '<span style="color:#9CA3AF;">—</span>'}</td>
       <td>
@@ -5981,32 +6006,90 @@ async function addLog(action, detail) {
 }
   
 /**
+ * FONCTION : libelleOrigineLog
+ * DESCRIPTION : Texte lisible de l'origine d'une ligne du journal
+ * PARAMÈTRES :
+ *   - origine (string|null) : valeur de logs.origine
+ * RETOURNE : string - « Admin web », « Appli », « Automatique », « Claude » ou « — » (ancienne ligne)
+ * MODIFIE : rien
+ */
+function libelleOrigineLog(origine) {
+  const libelles = { admin_web: 'Admin web', appli: 'Appli', automatique: 'Automatique', claude: 'Claude' };
+  return libelles[origine] || '—';
+}
+
+/**
  * FONCTION : loadLogs
- * DESCRIPTION : Charge et affiche le journal des actions depuis Supabase
- *               Affiche les 500 dernières actions triées du plus récent au plus ancien
+ * DESCRIPTION : Charge le journal (500 dernières actions, du plus récent au plus ancien) et les noms
+ *               des admins (logs.admin_id → profils), puis affiche le tableau
  * PARAMÈTRES : aucun
  * RETOURNE : rien
- * MODIFIE : contenu de #logs-table
+ * MODIFIE : variables logsCharges et nomsAdminsLogs, contenu de #logs-table
  */
+let logsCharges = [];
+let nomsAdminsLogs = {};
+
 async function loadLogs() {
-  const logs = await supabaseQuery('logs', { 
-    select: '*', 
+  const logs = await supabaseQuery('logs', {
+    select: '*',
     order: 'created_at.desc',
     filter: 'limit=500'
   });
-  
-  const tbody = document.getElementById('logs-table');
+  logsCharges = Array.isArray(logs) ? logs : [];
 
-  if (!logs.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#9CA3AF;padding:20px;">Aucune action enregistrée</td></tr>';
+  // Noms des admins présents dans le journal (une seule requête)
+  nomsAdminsLogs = {};
+  const ids = [...new Set(logsCharges.map(l => l.admin_id).filter(Boolean))];
+  if (ids.length) {
+    const profils = await supabaseQuery('profils', { select: 'id,prenom,nom,email', filter: `id=in.(${ids.join(',')})` });
+    if (Array.isArray(profils)) {
+      profils.forEach(p => {
+        const nom = [p.prenom, p.nom].filter(Boolean).join(' ').trim();
+        nomsAdminsLogs[p.id] = nom || p.email || 'Admin';
+      });
+    }
+  }
+  filtrerLogs();
+}
+
+/**
+ * FONCTION : filtrerLogs
+ * DESCRIPTION : Affiche les lignes du journal qui contiennent le texte tapé dans #search-logs
+ *               (action, détail, nom de l'admin, origine, date). Travaille sur les données déjà chargées.
+ * PARAMÈTRES : aucun (lit #search-logs)
+ * RETOURNE : rien
+ * MODIFIE : contenu de #logs-table et #logs-count
+ */
+function filtrerLogs() {
+  const requete = (document.getElementById('search-logs').value || '').toLowerCase().trim();
+  const tbody = document.getElementById('logs-table');
+  const nomAdmin = log => (log.admin_id && nomsAdminsLogs[log.admin_id]) || '';
+
+  const filtres = !requete ? logsCharges : logsCharges.filter(log =>
+    [log.action, log.detail, nomAdmin(log), libelleOrigineLog(log.origine), log.date, log.heure]
+      .some(champ => String(champ || '').toLowerCase().includes(requete))
+  );
+
+  document.getElementById('logs-count').textContent = requete
+    ? `${filtres.length} résultat${filtres.length > 1 ? 's' : ''} sur ${logsCharges.length}`
+    : '';
+
+  if (!logsCharges.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#9CA3AF;padding:20px;">Aucune action enregistrée</td></tr>';
+    return;
+  }
+  if (!filtres.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#9CA3AF;padding:20px;">Aucune action ne correspond à la recherche</td></tr>';
     return;
   }
 
-  tbody.innerHTML = logs.map(log => `<tr>
-    <td>${log.date}</td>
-    <td>${log.heure}</td>
-    <td><strong>${log.action}</strong></td>
-    <td style="color:#6B7280;">${log.detail || '-'}</td>
+  tbody.innerHTML = filtres.map(log => `<tr>
+    <td>${echapperHtml(log.date)}</td>
+    <td>${echapperHtml(log.heure)}</td>
+    <td>${echapperHtml(libelleOrigineLog(log.origine))}</td>
+    <td>${echapperHtml(nomAdmin(log)) || '—'}</td>
+    <td><strong>${echapperHtml(log.action)}</strong></td>
+    <td style="color:#6B7280;">${echapperHtml(log.detail) || '-'}</td>
   </tr>`).join('');
 }
 
